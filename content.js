@@ -12,7 +12,7 @@
 //
 // Ideas tomadas de llpgf/x-grok-visible-translate y Noctyn/x-native-translator (ambos MIT);
 // contrato del servicio de traducción, de la documentación pública de dfrnoch/liquidX y
-// rien7/twitter-extension-api.
+// rien7/twitter-extension-api, y comprobado en la X real el 26-nov-2026 con una sonda.
 (() => {
   'use strict';
 
@@ -92,6 +92,8 @@
   let paroPorPermiso = false;       // X rechazó las peticiones: nada más hasta recargar
   let paroPorFallos = false;        // X no traduce nada: nada más hasta recargar
   let pausasSinExito = 0;
+  let cupoHasta = 0;                // hasta que se reinicie la ventana de cupo de X (ms de reloj)
+  let cupoVisto = '';               // lo último que dijo X que quedaba, para el diagnóstico
 
   // …y por dónde va cada bloque de texto: 'visto', 'enCola', 'pedido', 'hecho' (traducción
   // puesta) o 'descartado' (no se vuelve a pedir).
@@ -374,7 +376,6 @@
   // Clasifica un bloque: traducido por X, en el idioma de la interfaz, ya en memoria,
   // registrado o nuevo.
   function revisarTexto(nodo) {
-    if (MODO_SONDA) return;
     const id = idDe(nodo);
     if (cajas.has(nodo)) {
       // X reutilizó el bloque para otra publicación.
@@ -463,6 +464,11 @@
       return Infinity;
     }
     if (document.hidden) return Infinity;
+    if (cupoHasta > Date.now()) {
+      avisar('cupo', 'X está cerca de su límite de traducciones en esta ventana: se deja de pedir '
+        + 'hasta que se reinicie, para no pasarse de ese límite.');
+      return cupoHasta - Date.now();
+    }
     while (pedidasPorHora.length && pedidasPorHora[0] + TOPE.VENTANA_MS <= performance.now()) pedidasPorHora.shift();
     if (pedidasPorHora.length >= TOPE.HORA) {
       avisar('tope-hora', `Tope de ${TOPE.HORA} traducciones por hora alcanzado: se espera a que pase el tiempo.`);
@@ -555,7 +561,7 @@
   }
 
   // Una petición cruda a una ruta de traducción de X. Devuelve lo que contestó; no lo interprete.
-  // Sin señal propia, se corta ella sola al tope de tiempo.
+  // La señal es el tope de tiempo de toda la publicación.
   async function abrirRuta(id, ruta, señal) {
     const esGrok = ruta !== 'clasico';
     const url = {
@@ -565,8 +571,6 @@
         + `tweetId=${id},destinationLanguage=Some(${idiomaDestino()}),translationSource=Some(X),feature=None,timeout=None,onlyCached=None`
         + '/translation/service/translateTweet',
     }[ruta];
-    const controlador = new AbortController();
-    const tope = setTimeout(() => controlador.abort(), RITMO.PETICION_MAX_MS);
     const empieza = performance.now();
     try {
       const respuesta = await fetch(url, {
@@ -576,18 +580,18 @@
           ? { ...cabecerasDeSesion(), 'content-type': 'text/plain;charset=UTF-8' }
           : cabecerasDeSesion(),
         body: esGrok ? JSON.stringify({ content_type: 'POST', id, dst_lang: idiomaDestino() }) : undefined,
-        signal: señal ?? controlador.signal,
+        signal: señal,
       });
       const cuerpo = await respuesta.text();
       const cabeceras = {};
-      for (const nombre of ['retry-after', 'x-rate-limit-reset']) cabeceras[nombre] = respuesta.headers.get(nombre);
+      for (const nombre of ['retry-after', 'x-rate-limit-limit', 'x-rate-limit-remaining', 'x-rate-limit-reset']) {
+        cabeceras[nombre] = respuesta.headers.get(nombre);
+      }
       return { estado: respuesta.status, ms: Math.round(performance.now() - empieza), cabeceras, cuerpo };
     } catch (error) {
       const fallo = new Error(error?.name === 'AbortError' ? 'tiempo agotado' : 'error de red');
       fallo.tipo = error?.name === 'AbortError' ? 'timeout' : 'red';
       throw fallo;
-    } finally {
-      clearTimeout(tope);
     }
   }
 
@@ -600,6 +604,10 @@
       'x-twitter-client-language': idiomaDestino(),
     };
   }
+
+  // Un trozo de lo que respondió X, para el aviso en consola: 240 caracteres como mucho. La
+  // respuesta clásica de la X real lleva al final el dato que importa (translationState).
+  const recorte = (cuerpo) => cuerpo.slice(0, 240).replace(/\s+/g, ' ');
 
   const describirFallo = (fallo) => ({
     estado: `HTTP ${fallo.estado}`,
@@ -629,15 +637,17 @@
         } else {
           try {
             const cruda = await abrirRuta(id, ruta, controlador.signal);
+            apuntarCupo(cruda.cabeceras);
             fallo.estado = cruda.estado;
             fallo.esperaMs = cruda.estado === 429 ? esperaTrasEl429(cruda) : 0;
             if (cruda.estado === 200) {
               const texto = ruta === 'clasico' ? textoClasico(cruda.cuerpo) : textoGrok(cruda.cuerpo);
               if (texto) return texto;
               fallo.tipo = 'vacia';
+              fallo.detalle = recorte(cruda.cuerpo);
             } else {
               fallo.tipo = 'estado';
-              fallo.detalle = cruda.cuerpo.slice(0, 120).replace(/\s+/g, ' ');
+              fallo.detalle = recorte(cruda.cuerpo);
             }
           } catch (error) {
             fallo.tipo = error.tipo;
@@ -662,6 +672,22 @@
     throw error;
   }
 
+  // X reparte su traducción en ventanas y lo cuenta en las cabeceras de cada respuesta. Medido
+  // en la X real (sonda del 26-nov-2026): 100 peticiones por ventana en el servicio de Grok y
+  // 187 en el clásico; la ventana parece de 15 minutos, a juzgar por la hora de reinicio. Cuando
+  // quedan pocas se deja de pedir hasta el reinicio, por prudencia: ese contador puede que no sea
+  // solo de la extensión (otras pestañas, la propia X) y pasarse es un 429 contra la cuenta. Si
+  // las cabeceras no vienen, no se reserva nada.
+  const CUPO_RESERVA = 10;
+  function apuntarCupo(cabeceras) {
+    const quedan = cabeceras['x-rate-limit-remaining'];
+    if (!quedan || !Number.isInteger(Number(quedan)) || Number(quedan) < 0) return;
+    const reinicio = Number(cabeceras['x-rate-limit-reset']);
+    cupoVisto = `${quedan} de ${cabeceras['x-rate-limit-limit'] ?? '?'}`;
+    if (Number(quedan) > CUPO_RESERVA || !(reinicio * 1000 > Date.now())) return;
+    cupoHasta = Math.max(cupoHasta, reinicio * 1000 + 1000);
+  }
+
   // Lo que dijo X que hay que esperar tras un 429: `retry-after` en segundos o en fecha HTTP,
   // o la hora de reseteo; si no viene nada, 60 s. Nunca más de 15 minutos.
   function esperaTrasEl429(cruda) {
@@ -683,15 +709,46 @@
     }
   }
 
-  // La ruta de Grok contesta en trozos, uno por línea: se concatenan.
+  // Cada objeto JSON que trae un cuerpo. La ruta de Grok contesta en trozos y X puede
+  // separarlos con saltos de línea o con espacios (la sonda del 26-nov-2026 no dejó
+  // distinguirlo): se sigue el nivel de llaves, así que un texto con llaves o comillas dentro
+  // no se parte.
+  function objetosJson(cuerpo) {
+    const objetos = [];
+    let nivel = 0;
+    let empieza = -1;
+    let enCadena = false;
+    let escapado = false;
+    for (let i = 0; i < cuerpo.length; i += 1) {
+      const c = cuerpo[i];
+      if (enCadena) {
+        if (escapado) escapado = false;
+        else if (c === '\\') escapado = true;
+        else if (c === '"') enCadena = false;
+      } else if (c === '"') enCadena = true;
+      else if (c === '{' || c === '[') {
+        if (nivel === 0) empieza = i;
+        nivel += 1;
+      } else if (c === '}' || c === ']') {
+        nivel = Math.max(0, nivel - 1);
+        if (nivel === 0 && empieza >= 0) {
+          objetos.push(cuerpo.slice(empieza, i + 1));
+          empieza = -1;
+        }
+      }
+    }
+    return objetos;
+  }
+
+  // La ruta de Grok contesta en trozos, un objeto JSON cada uno: se concatenan sus textos.
   function textoGrok(cuerpo) {
     const piezas = [];
-    for (const linea of descifrar(cuerpo).split('\n')) {
+    for (const objeto of objetosJson(descifrar(cuerpo))) {
       try {
-        const dato = JSON.parse(linea);
+        const dato = JSON.parse(objeto);
         const texto = dato?.result?.text ?? dato?.translated_text ?? dato?.text;
         if (typeof texto === 'string' && texto) piezas.push(texto);
-      } catch { /* líneas que no son JSON */ }
+      } catch { /* trozos que no son JSON */ }
     }
     const texto = piezas.join('').trim();
     return texto && !RESPUESTA_META.test(texto) ? texto : '';
@@ -993,6 +1050,16 @@
     if (!document.hidden) bombeo();
   });
 
+  // La versión es la del manifiesto: tras recargar la extensión, en consola se ve qué código
+  // está cargado. Fuera de una extensión (la bancada) no hay versión y no se enseña nada.
+  function version() {
+    try {
+      return globalThis.chrome?.runtime?.getManifest?.().version ?? '';
+    } catch {
+      return '';
+    }
+  }
+
   // Una sola vez, a los 5 s: el estado de la página en consola, contando todos los casos (también
   // los que no se pueden pedir), para que nada falle en silencio. Y, si hay botones que parecen
   // de traducir y no están en la lista, cuáles son, para añadirlos.
@@ -1010,11 +1077,13 @@
       else if (!idDe(nodo)) cuenta.sinEnlace += 1;
       else if (devueltas.has(idDe(nodo))) cuenta.devueltas += 1;
     }
-    console.info(`[X AutoTranslate] Página: bloques de texto ${bloques} · ya traducidas por X: ${cuenta.deX} · `
+    const cargada = version();
+    console.info(`[X AutoTranslate] Página: ${cargada ? `v${cargada} · ` : ''}bloques de texto ${bloques} · ya traducidas por X: ${cuenta.deX} · `
       + `en el idioma de la interfaz: ${cuenta.destino} · sin idioma: ${cuenta.sinIdioma} · `
       + `sin enlace permanente: ${cuenta.sinEnlace} · devueltas al original: ${cuenta.devueltas} · `
       + `traducidas: ${cuenta.traducidas} · pedidas: ${pedidas.size} · fallidas: ${fallidas.size} · `
-      + `en espera: ${cola.filter((trabajo) => trabajo.tipo === 'texto').length}`);
+      + `en espera: ${cola.filter((trabajo) => trabajo.tipo === 'texto').length}`
+      + (cupoVisto ? ` · cupo de X en esta ventana: ${cupoVisto}` : ''));
     if (!haySesion()) {
       console.warn('[X AutoTranslate] No hay sesión de X (falta la cookie ct0): no se pueden pedir traducciones.');
     }
@@ -1047,88 +1116,6 @@
   }, true);
 
   setTimeout(diagnosticar, RITMO.DIAGNOSTICO_MS);
-
-  // ── Sonda: diagnóstico de la X real. No cambia nada en la página. ──────────────────────
-
-  const MODO_SONDA = globalThis.__XAT_SONDA__ ?? false;
-
-  // Esquema de un elemento: etiqueta, atributos útiles e hijos, lo justo para reconocer la
-  // estructura sin volcar todo el HTML. Sin imágenes ni iconos.
-  function esquema(raiz, maxLineas = 45) {
-    const lineas = [];
-    const saltar = new Set(['svg', 'path', 'img', 'style', 'script', 'link']);
-    const recorrer = (nodo, nivel) => {
-      if (lineas.length >= maxLineas || nodo.nodeType !== 1 || saltar.has(nodo.localName)) return;
-      const partes = [nodo.localName];
-      for (const atributo of ['data-testid', 'role', 'lang', 'dir', 'aria-label', 'href', 'tabindex']) {
-        const valor = nodo.getAttribute(atributo);
-        if (valor !== null && valor !== '') partes.push(`${atributo}="${valor.slice(0, 60)}"`);
-      }
-      const texto = [...nodo.childNodes].filter((hijo) => hijo.nodeType === 3).map((hijo) => hijo.textContent.trim()).join(' ');
-      lineas.push(`${'  '.repeat(nivel)}${partes.join(' ')}${texto ? ` «${texto.slice(0, 50)}»` : ''}`);
-      for (const hijo of nodo.children) recorrer(hijo, nivel + 1);
-    };
-    recorrer(raiz, 0);
-    if (lineas.length >= maxLineas) lineas.push('  …');
-    return lineas;
-  }
-
-  async function sondear() {
-    const lineas = ['[X AutoTranslate SONDA] Diagnóstico de la página. No cambia nada: solo mira y hace una petición por ruta.'];
-    lineas.push(`ruta: ${location.pathname}`);
-    lineas.push(`idioma de la interfaz: ${idiomaDestino()} · cookie lang: ${cookie('lang') ? 'sí' : 'no'} · <html lang>: ${document.documentElement.lang || '(vacío)'}`);
-    lineas.push(`sesión: ${haySesion() ? 'sí' : 'no'} (cookie ct0)`);
-    const bloques = [...document.querySelectorAll('article [data-testid="tweetText"]')];
-    lineas.push(`bloques de texto en la página: ${bloques.length} · artículos: ${document.querySelectorAll('article').length}`);
-    const candidatos = [];
-    let descartadosDescritos = 0;
-    bloques.forEach((nodo, i) => {
-      const idioma = nodo.getAttribute('lang') ?? '';
-      let motivo = '';
-      if (traducidoPorX(nodo)) motivo = 'ya traducido por X';
-      else if (idioma.split('-')[0].toLowerCase() === idiomaDestino()) motivo = 'en el idioma de la interfaz';
-      else if (SIN_IDIOMA.has(idioma)) motivo = 'sin idioma';
-      else if (!idDe(nodo)) motivo = 'sin enlace permanente';
-      if (!motivo) candidatos.push(nodo);
-      else if (descartadosDescritos < 4) {
-        descartadosDescritos += 1;
-        lineas.push(`bloque ${i + 1} · idioma «${idioma || '—'}» · no se pediría: ${motivo}`);
-      }
-    });
-    lineas.push(`candidatos para pedir: ${candidatos.length}`);
-    candidatos.slice(0, 3).forEach((nodo, i) => {
-      lineas.push(`candidato ${i + 1} · idioma «${nodo.getAttribute('lang') || '—'}» · identificador ${idDe(nodo) || '(ninguno)'}${cajaDeCitaDe(nodo) ? ' · dentro de una caja de cita' : ''}`);
-    });
-    if (candidatos[0]) {
-      lineas.push('estructura del artículo del primer candidato:');
-      lineas.push(...esquema(candidatos[0].closest('article')).map((linea) => `    ${linea}`));
-    }
-    const deX = bloques.find((nodo) => traducidoPorX(nodo));
-    if (deX) {
-      lineas.push('estructura de un artículo que X ya tradujo:');
-      lineas.push(...esquema(deX.closest('article'), 35).map((linea) => `    ${linea}`));
-    }
-    if (!candidatos[0]) {
-      lineas.push('No hay ningún bloque que pedir. Abre un hilo con respuestas en otro idioma.');
-    } else if (!haySesion()) {
-      lineas.push('No hay sesión (falta la cookie ct0): no se puede pedir nada.');
-    } else {
-      const id = idDe(candidatos[0]);
-      for (const ruta of ['grok', 'grok-api', 'clasico']) {
-        try {
-          const r = await abrirRuta(id, ruta);
-          const cabeceras = Object.entries(r.cabeceras).filter(([, valor]) => valor).map(([nombre, valor]) => `${nombre}=${valor}`).join(' · ');
-          lineas.push(`${ruta}: ${r.estado} en ${r.ms} ms${cabeceras ? ` · ${cabeceras}` : ''}`);
-          lineas.push(`  cuerpo: ${r.cuerpo.slice(0, 300).replace(/\s+/g, ' ')}`);
-        } catch (error) {
-          lineas.push(`${ruta}: fallo (${error.message})`);
-        }
-      }
-    }
-    console.info(lineas.join('\n'));
-  }
-
-  if (MODO_SONDA) setTimeout(sondear, RITMO.DIAGNOSTICO_MS);
 
   document.querySelectorAll('article').forEach(examinarSeguro);
 })();

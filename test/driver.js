@@ -707,36 +707,6 @@
       },
     },
 
-    // Tarea 0: la sonda describe la página y hace una petición por ruta, sin tocar nada.
-    sonda: {
-      sonda: true,
-      sesion: true,
-      ajustes: { DIAGNOSTICO_MS: 500 },
-      avisosEsperados: ['[X AutoTranslate SONDA]', 'sesión: sí', 'idioma de la interfaz: es', 'grok: 200', 'grok-api: 404', 'clasico: 200'],
-      unSoloAviso: '[X AutoTranslate SONDA]',
-      api(id, ruta) {
-        return ruta === 'grok-api' ? { estado: 404 } : { latenciaMs: 100 };
-      },
-      async ejecutar(c) {
-        c.crearTraducidaPorX({ id: 'principal', texto: 'Anthropic studied ~300 implementations.' });
-        for (let i = 1; i <= 4; i++) c.crearPublicacion({ id: `r${i}`, boton: 'ninguno', texto: `Reply number ${i}.` });
-        await c.avanzar(2000);
-      },
-      comprobar(c) {
-        const fallos = [];
-        for (const id of ['principal', 'r1', 'r2', 'r3', 'r4']) {
-          if (c.cajaDe(id)) fallos.push(`${id} recibió una caja: la sonda no debe tocar la página`);
-          if (!c.originalVisible(id)) fallos.push(`el original de ${id} no está a la vista`);
-        }
-        const rutas = c.peticiones.map(({ ruta }) => ruta);
-        if (JSON.stringify(rutas) !== JSON.stringify(['grok', 'grok-api', 'clasico'])) {
-          fallos.push(`la sonda hizo ${JSON.stringify(rutas)} y debería hacer una petición por ruta, en ese orden`);
-        }
-        if (c.peticiones.some(({ id }) => id !== c.numero('r1'))) fallos.push('la sonda pidió algo que no es el primer candidato');
-        return fallos;
-      },
-    },
-
     // El caso real: X traduce solo el post principal del hilo; las respuestas llegan sin enlace
     // de traducir y la extensión se las tiene que pedir a X.
     hilo: {
@@ -1739,11 +1709,128 @@
     };
   }
 
+  // ---- Lo que enseñó la sonda en la X real (26-nov-2026) --------------------------------
+
+  // El objeto de escenarios ya está cerrado (los de los 429 también se añaden así).
+  Object.assign(escenarios, {
+
+  // X puede mandar los trozos de Grok separados por espacios y no por saltos de línea: la sonda los
+  // imprimió juntos y no dejó distinguirlo. Se montan igual, y un trozo con llaves o comillas
+  // dentro no se parte.
+  trozosJuntos: {
+    sesion: true,
+    api: { trozos: 6, separador: ' ' },
+    async ejecutar(c) {
+      c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'A piece with {braces}, a }{ inside and "quotes", then enough words to split in six.' });
+      await c.avanzar(2500);
+    },
+    comprobar(c) {
+      const fallos = [];
+      const esperada = 'ES: A piece with {braces}, a }{ inside and "quotes", then enough words to split in six.';
+      if (c.traduccionDe('r1') !== esperada) fallos.push(`los trozos separados por espacios no se montaron («${c.traduccionDe('r1')}»)`);
+      // Que no la rescate la ruta clásica: en la X real no traduce, así que Grok tiene que montarla sola.
+      const rutas = c.peticiones.map(({ ruta }) => ruta);
+      if (JSON.stringify(rutas) !== JSON.stringify(['grok'])) fallos.push(`se pidió ${JSON.stringify(rutas)} y Grok debería bastar con una petición`);
+      return fallos;
+    },
+  },
+
+  // X cuenta sus traducciones en ventanas de 15 minutos y lo dice en cabeceras (medido en la sonda:
+  // 100 por ventana en Grok). Cuando quedan pocas no se pide nada hasta el reinicio: ni un 429
+  // contra la cuenta, ni el botón de X sin cupo.
+  reservaDeCupo: {
+    sesion: true,
+    ajustes: { DIAGNOSTICO_MS: 1500 },
+    avisosEsperados: ['cerca de su límite de traducciones', 'cupo de X en esta ventana: 1 de 100'],
+    api: (() => {
+      let primera = true;
+      return () => (primera
+        ? ((primera = false), {
+          latenciaMs: 50,
+          cabeceras: {
+            'x-rate-limit-limit': '100',
+            'x-rate-limit-remaining': '1',
+            'x-rate-limit-reset': String(Math.floor(Date.now() / 1000) + 3),
+          },
+        })
+        : { latenciaMs: 50 });
+    })(),
+    async ejecutar(c) {
+      c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'Almost out of quota.' });
+      c.crearPublicacion({ id: 'r2', boton: 'ninguno', texto: 'Asked after the window resets.' });
+      c.crearPublicacion({ id: 'r3', boton: 'ninguno', texto: 'Asked at the usual pace.' });
+      await c.avanzar(8000);
+    },
+    comprobar(c) {
+      const fallos = [];
+      const [primera, segunda, tercera] = c.peticiones;
+      if (!tercera) {
+        fallos.push(`se hicieron ${c.peticiones.length} peticiones y deberían ser 3: lo reservado se libera al reiniciarse la ventana`);
+      } else {
+        // X da el reinicio con precisión de segundos: quedan de 2 a 3 s, más el margen.
+        if (segunda.inicio - primera.fin < 1900) {
+          fallos.push(`X dijo que quedaba 1 petición en su ventana y la siguiente salió ${segunda.inicio - primera.fin} ms después: debe esperar al reinicio`);
+        }
+        if (tercera.inicio - segunda.fin > 1700) {
+          fallos.push(`tras el reinicio la petición siguiente tardó ${tercera.inicio - segunda.fin} ms y debe seguir el ritmo de siempre`);
+        }
+      }
+      if (c.traduccionDe('r3') !== 'ES: Asked at the usual pace.') fallos.push(`r3 no está traducida («${c.traduccionDe('r3')}»)`);
+      return fallos;
+    },
+  },
+
+  // Lo que contestó la ruta clásica en la X real (sonda del 26-nov-2026): 200 sin traducción
+  // («NotCached»). No se pinta nada y el aviso enseña lo que respondió.
+  clasicoVacio: {
+    sesion: true,
+    avisosEsperados: ['respuesta sin traducción', 'NotCached'],
+    api(id, ruta) {
+      return ruta === 'clasico'
+        ? {
+          latenciaMs: 50,
+          cuerpo: JSON.stringify({
+            id: String(id), id_str: String(id), translation: '',
+            entities: { symbols: [], hashtags: [], user_mentions: [], urls: [], media: [], timestamps: [] },
+            translationState: 'NotCached', destinationLanguage: '',
+          }),
+        }
+        : { estado: 500 };
+    },
+    async ejecutar(c) {
+      c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'Only the classic route answers.' });
+      await c.avanzar(2500);
+    },
+    comprobar(c) {
+      const fallos = [];
+      if (c.cajaDe('r1') || !c.originalVisible('r1')) fallos.push('una respuesta sin traducción se pintó como si lo fuera');
+      return fallos;
+    },
+  },
+
+  // Tras recargar la extensión, la consola dice qué versión está cargada: la del manifiesto.
+  versionEnConsola: {
+    sesion: true,
+    ajustes: { DIAGNOSTICO_MS: 1500 },
+    avisosEsperados: ['[X AutoTranslate] Página: v9.9.9 · bloques de texto'],
+    async ejecutar(c) {
+      // En una extensión de verdad, chrome.runtime.getManifest() es la del manifiesto.
+      Object.defineProperty(window, 'chrome', {
+        value: { runtime: { getManifest: () => ({ version: '9.9.9' }) } },
+        configurable: true,
+      });
+      c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'Any reply.' });
+      await c.avanzar(2000);
+    },
+    comprobar: () => [],
+  },
+
+  });
+
   // ---- Arranque----------------------------------------------------------------
 
   const definicion = escenarios[NOMBRE];
   // Los ajustes del escenario deben estar antes de que cargue la extensión.
-  globalThis.__XAT_SONDA__ = !!definicion?.sonda;
   globalThis.__XAT_AJUSTES__ = { ...(definicion?.ajustes ?? {}) };
   // La extensión sortea el hueco entre clics con Math.random(). Para que cada escenario sea
   // reproducible, el simulador le da una secuencia fija (0 → siempre el hueco mínimo).
@@ -1798,17 +1885,18 @@
     }
     const pub = porNumero.get(String(id));
     if (!pub) return new Response(JSON.stringify({ errors: [{ code: 34, message: 'La publicación no existe' }] }), { status: 404 });
+    // El `cuerpo` de la regla vale para cualquier ruta: así se imita lo que X contestó de verdad.
+    if (regla.cuerpo !== undefined) return new Response(regla.cuerpo, { status: 200, headers: regla.cabeceras ?? {} });
     const traduccion = pub.traduccion ?? `ES: ${pub.original}`;
     if (clasico) {
       const cuerpo = JSON.stringify({ translation: traduccion, sourceLanguage: pub.lang, destinationLanguage: 'es' });
-      return new Response(cuerpo, { status: 200 });
+      return new Response(cuerpo, { status: 200, headers: regla.cabeceras ?? {} });
     }
-    // La ruta de Grok contesta en trozos, uno por línea.
-    if (regla.cuerpo !== undefined) return new Response(regla.cuerpo, { status: 200 });
+    // La ruta de Grok contesta en trozos, un objeto JSON cada uno, separados por `separador`.
     const trozos = regla.trozos ?? 1;
     const piezas = trozos > 1 ? (traduccion.match(new RegExp(`[\\s\\S]{1,${Math.ceil(traduccion.length / trozos)}}`, 'g')) ?? []) : [traduccion];
-    const cuerpo = piezas.map((texto) => JSON.stringify({ result: { content_type: 'POST', text: texto, entities: {} } })).join('\n');
-    return new Response(cuerpo, { status: 200 });
+    const cuerpo = piezas.map((texto) => JSON.stringify({ result: { content_type: 'POST', text: texto, entities: {} } })).join(regla.separador ?? '\n');
+    return new Response(cuerpo, { status: 200, headers: regla.cabeceras ?? {} });
   };
 
   document.addEventListener('DOMContentLoaded', async () => {
