@@ -4,12 +4,13 @@
 
 ## Estado
 
-🟢 **v2.0.0 terminada, probada en el simulador y con su forma de pedir la traducción comprobada en la X real. Falta que el Socio la pruebe entera en su X.**
+🟢 **v2.0.0 terminada, probada en el simulador, con su forma de pedir la traducción comprobada en la X real y con la primera traducción real ya pedida y puesta en la X del Socio. Falta su confirmación visual.**
 
 - La **v1.0.0** solo pulsaba el botón «Traducir publicación» de X. En la X real no sirve para las respuestas de un hilo, porque **X no pone ese botón en ellas**.
 - La **v2.0.0** añade un segundo camino: pedir la traducción al propio servicio de X y ponerla en el sitio del original. **Tiene que estar en `main` y subida al repo** (`asturwebs/X-AutoTranslate`, etiqueta `v2.0.0`). Si `main` no la tiene, la fusión del final de la sesión del 26-nov no llegó a hacerse: ver «Cómo continuar».
 - **Comprobado en la X real del Socio (sonda del 26-nov, tarde):** las tres rutas responden 200 con su sesión y Grok devuelve la traducción. Detalle en el diseño v2, sección «La sonda».
-- **Sin comprobar:** la extensión entera corriendo en su X (aspecto de la barra propia junto a la de X, ritmo real).
+- **Primera prueba del Socio (26-nov, 22:2x):** la 2.0.0 carga (su consola dice `v2.0.0`) y ya pidió y puso una traducción real. Su resumen a los 5 s: 18 bloques de texto, pedidas 1, traducidas 1, fallidas 0, en espera 3 (y una en vuelo, que ahí no cuenta), cupo de X 99 de 100. Ningún aviso de fallo.
+- **Sin comprobar todavía:** el aspecto de la barra propia junto a la de X y el recorrido de un hilo entero bajando.
 
 ## Dónde está cada cosa
 
