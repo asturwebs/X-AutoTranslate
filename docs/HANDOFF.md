@@ -20,7 +20,7 @@
 | `test/run.mjs`, `test/driver.js`, `test/mock-x.html` | La bancada: simula a X y su servicio de traducción |
 | `docs/superpowers/specs/` | Diseño de la v1 y de la v2 (el de la v2 lleva el resultado de la sonda) |
 | `docs/superpowers/plans/` | Planes de la v1 y de la v2, con las enmiendas de la ejecución |
-| `~/Work/x-autotranslate-adversarial-v2/` | Revisión adversaria del diseño (congelado, briefs, informes, `delta.md`) y copia del registro de ejecución del plan v2 (`registro-v2-progress.md`: decisiones tomadas y menores aplazados) |
+| `~/Work/x-autotranslate-adversarial-v2/` | Revisión adversaria del diseño (congelado, briefs, informes, `delta.md`) copia del registro de ejecución del plan v2 (`registro-v2-progress.md`: decisiones tomadas y menores aplazados) y la lista de roturas del código (`mutar-v2.py`) |
 
 El worktree de desarrollo `~/Projects/X-AutoTranslate-dev` y la rama `feature/v2` ya no existen: se borraron al fusionar.
 
@@ -59,7 +59,7 @@ node test/run.mjs            # todos los escenarios, unos 6 minutos
 node test/run.mjs hilo       # solo algunos
 ```
 
-Sin dependencias. Un Chromium sin cabeza con perfil temporal, por `--remote-debugging-pipe`, sobre `test/mock-x.html`, servida por HTTP en `127.0.0.1` (puerto aleatorio, solo durante las pruebas) porque las cookies no existen sobre `file://`. Para romper el código a propósito había un `mutar.py` en el espacio de trabajo del plan, que se borró con él; su lista de roturas está resumida en `~/Work/x-autotranslate-adversarial-v2/registro-v2-progress.md`.
+Sin dependencias. Un Chromium sin cabeza con perfil temporal, por `--remote-debugging-pipe`, sobre `test/mock-x.html`, servida por HTTP en `127.0.0.1` (puerto aleatorio, solo durante las pruebas) porque las cookies no existen sobre `file://`. Para romper el código a propósito está la lista de roturas de la v2, fuera del repo: `~/Work/x-autotranslate-adversarial-v2/mutar-v2.py`. Se copia a la raíz del proyecto, se ajustan las anclas al código nuevo y se lanza con `python3 -I mutar.py` (restaura `content.js` al acabar y dice cuántas cazó la bancada).
 
 ## Pendientes
 
