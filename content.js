@@ -24,7 +24,8 @@
   // Tiempos en ms. __XAT_AJUSTES__ solo lo fija la bancada de pruebas.
   const RITMO = Object.freeze({
     PARADA_MS: 300,      // cuánto tiene que estar el botón en pantalla antes de contar
-    HUECO_MIN_MS: 300,   // mínimo entre dos clics
+    HUECO_MIN_MS: 600,   // hueco mínimo entre dos clics
+    HUECO_MAX_MS: 1500,  // hueco máximo: cada clic sortea uno entre el mínimo y este
     ESPERA_MAX_MS: 1500, // hasta que X responde al último clic (o pasa este tiempo) no se pulsa el siguiente
     FALLO_MS: 5000,      // si el botón sigue ahí tras este tiempo, el clic ha fallado
     REINTENTO_MS: 10000, // espera antes de reintentar una publicación que falló
@@ -46,19 +47,21 @@
   const sucios = new Set();         // <article> con nodos nuevos desde el último examen
   const revertidos = new WeakSet(); // <article> donde el Socio pulsó «Mostrar original»
   const cola = [];
-  let ultimoClic = -Infinity;
+  let huecoHasta = -Infinity; // tras cada clic no se pulsa nada hasta que pasa el hueco sorteado
   let pausadoHasta = 0;       // la cola no pulsa nada hasta este momento
   let fallosSeguidos = 0;
   let temporizador = 0;       // próxima llamada a bombeo(), si la hay
   let avisoEn = 0;            // momento en que dispararía ese temporizador
   let examenPendiente = false;
 
-  function coincide(el, etiquetas) {
-    const aria = el.getAttribute('aria-label');
-    return (aria !== null && etiquetas.has(aria.trim())) || etiquetas.has(el.textContent.trim());
+  // Nombre accesible del control: su aria-label si lo tiene; si no, su texto visible.
+  // Si el aria-label no está en la lista, el botón no se pulsa aunque su texto sí lo esté.
+  function etiqueta(el) {
+    const aria = el.getAttribute('aria-label')?.trim();
+    return aria || el.textContent.trim();
   }
-  const esBotonTraducir = (el) => coincide(el, ETIQUETAS_TRADUCIR);
-  const esBotonOriginal = (el) => coincide(el, ETIQUETAS_ORIGINAL);
+  const esBotonTraducir = (el) => ETIQUETAS_TRADUCIR.has(etiqueta(el));
+  const esBotonOriginal = (el) => ETIQUETAS_ORIGINAL.has(etiqueta(el));
 
   function enPantalla(el) {
     const r = el.getBoundingClientRect();
@@ -102,10 +105,13 @@
     const ahora = performance.now();
     intentos.set(btn, (intentos.get(btn) ?? 0) + 1);
     pendientes.set(btn, ahora);
-    ultimoClic = ahora;
+    // El hueco se sortea y no depende de la respuesta de X: si X quita el control de inmediato,
+    // los clics no van a cadencia fija ni se acumulan.
+    const hueco = RITMO.HUECO_MIN_MS + Math.random() * (Math.max(RITMO.HUECO_MAX_MS, RITMO.HUECO_MIN_MS) - RITMO.HUECO_MIN_MS);
+    huecoHasta = ahora + hueco;
     estado.set(btn, 'pendiente');
     btn.click();
-    programar(RITMO.HUECO_MIN_MS);
+    programar(hueco);
   }
 
   // Un pendiente cuyo botón ya no es de traducir ha salido bien (X lo ha sustituido).
@@ -160,14 +166,20 @@
   function bombeo() {
     resolverPendientes();
     const ahora = performance.now();
+    // El fallo más cercano lleva su propio despertador: en una página quieta nada más llamaría
+    // a bombeo() y un clic sin respuesta no se detectaría nunca.
+    let proximoFallo = Infinity;
+    for (const clic of pendientes.values()) proximoFallo = Math.min(proximoFallo, clic + RITMO.FALLO_MS);
+    if (proximoFallo < Infinity) programar(proximoFallo - ahora);
     if (ahora < pausadoHasta) {
       programar(pausadoHasta - ahora);
       return;
     }
-    // Hasta que X responde al último clic (o pasa ESPERA_MAX_MS) no se pulsa el siguiente.
+    // Hasta que X responde al último clic (o pasa ESPERA_MAX_MS), y hasta que pasa el hueco
+    // sorteado, no se pulsa el siguiente.
     let bloqueo = 0;
     for (const clic of pendientes.values()) bloqueo = Math.max(bloqueo, clic + RITMO.ESPERA_MAX_MS - ahora);
-    const falta = Math.max(bloqueo, RITMO.HUECO_MIN_MS - (ahora - ultimoClic));
+    const falta = Math.max(bloqueo, huecoHasta - ahora);
     if (falta > 0) {
       programar(falta);
       return;

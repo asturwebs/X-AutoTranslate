@@ -24,7 +24,8 @@
     pub.traducida = true;
     pub.texto.textContent = `ES: ${pub.original}`;
     pub.texto.lang = 'es';
-    // El mismo elemento pasa a «Mostrar original».
+    // El mismo elemento pasa a «Mostrar original» (si el control sigue ahí).
+    if (!pub.control) return;
     pub.control.setAttribute('aria-label', 'Mostrar original');
     pub.control.textContent = 'Mostrar original';
   }
@@ -35,6 +36,11 @@
     if (pub.traducida) return mostrarOriginal(pub);
     clics.push({ id: pub.id, t: Math.round(performance.now() - t0) });
     if (pub.falla) return;
+    // Algunos controles desaparecen en cuanto X recibe el clic, y la traducción llega después.
+    if (pub.quitaControl) {
+      pub.control.remove();
+      pub.control = null;
+    }
     setTimeout(() => (pub.redibuja ? pub.redibuja() : traducir(pub)), pub.retrasoMs);
   }
 
@@ -120,6 +126,7 @@
 
   function crearPublicacion({
     id, lang = 'en', boton = 'texto', retrasoMs = 50, falla = false, yaTraducida = false, etiqueta,
+    quitaControl = false,
   }) {
     const articulo = document.createElement('article');
     articulo.className = 'xat-pub';
@@ -133,7 +140,7 @@
     hueco.className = 'xat-control';
     articulo.append(texto, hueco);
     const pub = {
-      id, articulo, texto, hueco, original, retrasoMs, falla, traducida: false, control: null, lang,
+      id, articulo, texto, hueco, original, retrasoMs, falla, traducida: false, control: null, lang, quitaControl,
     };
     if (yaTraducida) {
       // X ya la tradujo: texto en español y «Mostrar original».
@@ -183,6 +190,10 @@
       publicaciones.clear();
       for (const id of ids) crearPublicacion({ id, boton });
     },
+    // Alguien traduce a mano, sin que intervenga la extensión.
+    traducirAMano(id) {
+      traducir(publicaciones.get(id));
+    },
     irA(id) {
       publicaciones.get(id).articulo.scrollIntoView({ block: 'center' });
     },
@@ -228,7 +239,7 @@
           traducidas: new Set(c.memo.visible.filter((id) => c.texto(id).startsWith('ES: '))),
         };
         c.irA('r11');
-        await c.avanzar(1500);
+        await c.avanzar(2500); // da tiempo a que le llegue el turno a r12: si fuera a pulsarse, sería aquí
       },
       comprobar(c) {
         const fallos = [];
@@ -242,12 +253,18 @@
         }
         const tiempos = c.memo.fase1.clics.map(({ t }) => t);
         for (let i = 1; i < tiempos.length; i++) {
-          if (tiempos[i] - tiempos[i - 1] < 280) fallos.push(`dos clics seguidos distan ${tiempos[i] - tiempos[i - 1]} ms (mínimo 280)`);
+          if (tiempos[i] - tiempos[i - 1] < 580) fallos.push(`dos clics seguidos distan ${tiempos[i] - tiempos[i - 1]} ms (mínimo 580)`);
         }
         for (const [id, n] of Object.entries(recuentos(c.clics))) {
           if (n > 1) fallos.push(`${id} recibió ${n} clics`);
         }
-        if (!c.texto('r11')?.startsWith('ES: ')) fallos.push(`tras scrollear, r11 no está traducida («${c.texto('r11')}»)`);
+        for (const id of ['r10', 'r11']) {
+          if (!c.texto(id)?.startsWith('ES: ')) fallos.push(`tras scrollear, ${id} no está traducida («${c.texto(id)}»)`);
+        }
+        // r4, r8 y r12 llevan un aria-label que no está en la lista («Traducir»): no se pulsan.
+        for (const id of ['r4', 'r8', 'r12']) {
+          if (c.clics.some(({ id: x }) => x === id)) fallos.push(`${id} tiene un aria-label fuera de la lista y recibió un clic`);
+        }
         return fallos;
       },
     },
@@ -257,7 +274,7 @@
       async ejecutar(c) {
         for (let i = 1; i <= 20; i++) c.crearPublicacion({ id: `r${i}` });
         await c.recorrerRapido(60);
-        await c.avanzar(1000);
+        await c.avanzar(2000);
       },
       comprobar(c) {
         const fallos = [];
@@ -461,6 +478,98 @@
       },
     },
 
+    // Si X quita el control en cuanto recibe el clic, la extensión no puede usarlo de señal de
+    // fin: entre dos clics hay siempre un hueco sorteado, ni corto ni de cadencia fija.
+    // Con la secuencia [0, 1] los huecos son 600 + 0·900 y 600 + 1·900.
+    sinEspera: {
+      azar: [0, 1],
+      async ejecutar(c) {
+        for (let i = 1; i <= 3; i++) c.crearPublicacion({ id: `r${i}`, retrasoMs: 1000, quitaControl: true });
+        await c.avanzar(4500);
+      },
+      comprobar(c) {
+        const fallos = [];
+        const tiempos = c.clics.map(({ t }) => t);
+        const huecos = [tiempos[1] - tiempos[0], tiempos[2] - tiempos[1]];
+        if (huecos[0] < 580 || huecos[0] > 640) fallos.push(`el 1.er hueco es de ${huecos[0]} ms y debería rondar 600`);
+        if (huecos[1] < 1480 || huecos[1] > 1540) fallos.push(`el 2.º hueco es de ${huecos[1]} ms y debería rondar 1500`);
+        for (const id of ['r1', 'r2', 'r3']) {
+          if (c.clics.filter(({ id: x }) => x === id).length !== 1) fallos.push(`${id} no recibió exactamente un clic`);
+          if (!c.texto(id)?.startsWith('ES: ')) fallos.push(`${id} no está traducida («${c.texto(id)}»)`);
+        }
+        return fallos;
+      },
+    },
+
+    // El plazo de fallo lleva su propio despertador: aunque nadie toque la página, un clic sin
+    // respuesta se detecta a los FALLO_MS y se reintenta. Aquí FALLO_MS no coincide con la espera.
+    falloTarde: {
+      ajustes: { FALLO_MS: 3000, REINTENTO_MS: 2000, PAUSA_MS: 1000 },
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'r1', falla: true });
+        c.crearPublicacion({ id: 'r2' });
+        await c.avanzar(9000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        const deR1 = c.clics.filter(({ id }) => id === 'r1');
+        if (deR1.length !== 2) fallos.push(`r1 recibió ${deR1.length} clics y debería recibir 2: el fallo no se detectó a los 3 s`);
+        else if (deR1[1].t - deR1[0].t < 4980) fallos.push(`el reintento de r1 llegó ${deR1[1].t - deR1[0].t} ms después del 1.º clic (mínimo 4980)`);
+        if (c.clics.filter(({ id }) => id === 'r2').length !== 1 || !c.texto('r2')?.startsWith('ES: ')) {
+          fallos.push('r2 no quedó traducida con un solo clic');
+        }
+        return fallos;
+      },
+    },
+
+    // Una publicación que estaba en cola y alguien tradujo a mano mientras esperaba no se toca:
+    // pulsar su control desharía esa traducción.
+    manualEnCola: {
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'r1', retrasoMs: 2500 });
+        c.crearPublicacion({ id: 'r2' });
+        c.crearPublicacion({ id: 'r3' });
+        await c.avanzar(800);
+        c.traducirAMano('r2'); // r2 y r3 están en cola, detrás de r1
+        await c.avanzar(4000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        if (c.texto('r2') !== 'ES: Original r2') fallos.push(`r2 no conserva la traducción hecha a mano («${c.texto('r2')}»)`);
+        if (c.clics.some(({ id }) => id === 'r2')) fallos.push('la extensión pulsó el control de r2, que ya era «Mostrar original»');
+        for (const id of ['r1', 'r3']) {
+          if (c.clics.filter(({ id: x }) => x === id).length !== 1) fallos.push(`${id} no recibió exactamente un clic`);
+          if (!c.texto(id)?.startsWith('ES: ')) fallos.push(`${id} no está traducida («${c.texto(id)}»)`);
+        }
+        return fallos;
+      },
+    },
+
+    // Lo que estaba en cola y salió de pantalla antes de su turno no se pulsa hasta que vuelve.
+    saleEnCola: {
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'r1', retrasoMs: 2500 });
+        c.crearPublicacion({ id: 'r2' });
+        c.crearPublicacion({ id: 'r3' });
+        for (let i = 4; i <= 9; i++) c.crearPublicacion({ id: `r${i}`, retrasoMs: 800 });
+        await c.avanzar(800);
+        c.irA('r9'); // r2 y r3 salen de pantalla con el clic de r1 aún pendiente
+        await c.avanzar(2500);
+        c.memo.clicsFuera = c.clics.filter(({ id }) => id === 'r2' || id === 'r3').length;
+        c.irA('r1'); // y vuelven
+        await c.avanzar(3000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        if (c.memo.clicsFuera !== 0) fallos.push('se pulsó algo que estaba fuera de pantalla');
+        for (const id of ['r2', 'r3']) {
+          if (c.clics.filter(({ id: x }) => x === id).length !== 1) fallos.push(`${id} no recibió exactamente un clic`);
+          if (!c.texto(id)?.startsWith('ES: ')) fallos.push(`${id} no está traducida («${c.texto(id)}»)`);
+        }
+        return fallos;
+      },
+    },
+
     // X redibuja el hilo al traducir su post principal: la cita, con botón nuevo, también se traduce.
     redisado: {
       async ejecutar(c) {
@@ -483,6 +592,11 @@
 
   // Los ajustes del escenario deben estar antes de que cargue la extensión.
   globalThis.__XAT_AJUSTES__ = { ...(escenarios[NOMBRE]?.ajustes ?? {}) };
+  // La extensión sortea el hueco entre clics con Math.random(). Para que cada escenario sea
+  // reproducible, el simulador le da una secuencia fija (0 → siempre el hueco mínimo).
+  const azar = escenarios[NOMBRE]?.azar ?? [0];
+  let tirada = 0;
+  Math.random = () => azar[tirada++ % azar.length];
 
   document.addEventListener('DOMContentLoaded', async () => {
     const definicion = escenarios[NOMBRE];
