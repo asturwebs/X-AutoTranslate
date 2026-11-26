@@ -2,11 +2,13 @@
 
 Extensión de Chrome que **traduce al español** por ti en X lo que va entrando en pantalla: las respuestas de un hilo, las citas y cualquier publicación que X no traduce sola.
 
+**Complementa a la traducción nativa de X.** En un hilo, la traducción de X se queda en el post principal: sus respuestas aparecen en su idioma y solo se traducen si entras en ellas. La extensión las traduce donde están, sin entrar en nada.
+
 La última versión está en [Releases](https://github.com/asturwebs/X-AutoTranslate/releases/latest), en un zip listo para cargar en Chrome. El registro de cambios está en [CHANGELOG.md](CHANGELOG.md).
 
 ## Por qué
 
-X ofrece traducción automática para los posts (se activa por idioma), pero no llega a las respuestas de un hilo: aparecen en su idioma y **sin ningún enlace de traducir**. Solo se traducen al entrar en ellas. Leer un hilo obliga a entrar en cada respuesta. La extensión de la tienda que hacía eso tiene un tope de 50 traducciones al día en su versión gratuita.
+La traducción automática de X se activa por idioma y, en un hilo, se queda en el post principal: las respuestas aparecen en su idioma y **sin ningún enlace de traducir**. Leer un hilo obliga a entrar en cada una. La extensión de la tienda que hacía eso tiene un tope de 50 traducciones al día en su versión gratuita.
 
 ## Qué hace
 
@@ -15,7 +17,7 @@ X ofrece traducción automática para los posts (se activa por idioma), pero no 
 - Si no pone nada (es lo que pasa en las respuestas), le pide a X su traducción, a su propio servicio de traducción y con tu sesión, y la pone en el sitio del original, con la misma letra que el texto de X y una barra «Traducido del inglés · Mostrar original».
 - Con «Mostrar original» vuelves al texto de X; con «Mostrar traducción», a la traducción. Lo que devuelves al original no se vuelve a traducir en esa página.
 - Va de una en una y con ritmo: una petición cada vez, con un hueco aleatorio de 0,6 a 1,5 s.
-- **Va al idioma de tu interfaz de X**: español, si usas X en español. La extensión está hecha para X en español: su barra y sus botones están solo en español, y de los botones de X reconoce los de X en español y en inglés.
+- **Va al idioma de tu interfaz de X**: español, si usas X en español. Por eso necesitas tener X en español (en [Instalación](#instalación) está cómo). La extensión está hecha para X en español: su barra y sus botones están solo en español, y de los botones de X reconoce los de X en español y en inglés.
 
 ## Tu cuenta, por delante
 
@@ -45,7 +47,13 @@ Riesgo que queda: X puede cambiar o limitar su servicio de traducción, o tomar 
 
 **v2.0.1.** Probada contra una página que simula a X, con un servicio de traducción falso; su forma de pedir la traducción, comprobada con una sesión real de X el 26-nov-2026; y la 2.0.0, probada entera en la X real: las respuestas de un hilo se traducen al bajar. La 2.0.1 corrige el tamaño y la letra del texto traducido, que salían más pequeños que los de X. Si no traduce, mira [Si no traduce](#si-no-traduce).
 
-Hace falta tener la sesión iniciada en X. Está probada solo en Chrome.
+## Instalación
+
+Antes de nada, comprueba tres cosas:
+
+- **X en español.** La extensión traduce al idioma en que tengas la interfaz de X. Para ponerla en español, en la web: **Más → Configuración y privacidad → Accesibilidad, visualización e idiomas → Idiomas → Idioma de visualización**. Puede que te pida la contraseña; pulsa **Guardar**. Es la ruta que da [la ayuda de X](https://help.x.com/es/managing-your-account/how-to-change-language-settings).
+- **La sesión de X iniciada** en ese navegador: la extensión le pide a X las traducciones con tu sesión.
+- **Chrome, en el ordenador.** Es una extensión de Chrome, así que no se puede instalar en la app del móvil. Está probada solo en Chrome.
 
 1. Descarga el zip de la [última versión](https://github.com/asturwebs/X-AutoTranslate/releases/latest) y descomprímelo, o clona el repo.
 2. Chrome → `chrome://extensions`.
@@ -76,6 +84,8 @@ Para quitarla, «Quitar» en esa misma página. Para actualizarla, descomprime e
    - *X está cerca de su límite de traducciones en esta ventana*: se espera al reinicio de la ventana para no pasarse del límite de X.
    - *X no está traduciendo nada: dos pausas seguidas por fallos sin ningún éxito*: su servicio falla para todo. Recarga la página más tarde.
    - *No reconozco estos botones de traducir…*: X usa un texto que no está en la lista. Añádelo a `ETIQUETAS_TRADUCIR` en `content.js` y pulsa el botón de recargar de la extensión.
+
+Si te traduce a **otro idioma**, tu interfaz de X no está en español: la extensión traduce al idioma de tu interfaz de X. En [Instalación](#instalación) está cómo cambiarlo.
 
 ## Desarrollo
 
