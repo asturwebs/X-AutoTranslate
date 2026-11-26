@@ -20,7 +20,7 @@ Nada. Lo que hay pendiente está en [docs/HANDOFF.md](docs/HANDOFF.md).
 
 ## [2.0.0] - 2026-11-26
 
-La v1 solo pulsaba el botón «Traducir publicación» de X, y X no pone ese botón en las respuestas de un hilo. La v2 añade un segundo camino para lo que X deja sin traducir.
+La v1 solo pulsaba el botón «Traducir publicación» de X, y X no pone ese botón en las respuestas de un hilo. La v2 añade un segundo camino: pedirle a X la traducción al español de lo que deja sin traducir.
 
 ### Añadido
 

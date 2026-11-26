@@ -73,7 +73,8 @@ Sin dependencias. Un Chromium sin cabeza con perfil temporal, por `--remote-debu
 2. **Licencia del repositorio.** Sin decidir; es del Socio.
 3. Publicar en la Chrome Web Store, si se quiere. Hoy se carga desempaquetada.
 4. Menores aplazados de las dos revisiones de código: la vuelta atrás con teclado, rendimiento sin medir, el manifiesto sin prueba automática (v1); una ventana tapada por otra no cuenta como oculta (solo `document.hidden`), `test/run.mjs` sin manejador de SIGINT/SIGTERM (v2); y usar `AbortSignal.timeout()` en vez de `AbortController` con `setTimeout` para el tope de tiempo de cada publicación, que es lo que pide la guía `js` de `modern-web-guidance` (comprobando también `TimeoutError`, no solo `AbortError`; hoy funciona igual con el temporizador manual). Y de la adversaria: coordinación entre pestañas, no hecha por decisión del Socio.
-5. La ruta clásica de X, en la única medición real, no tradujo nada. Se queda como último recurso porque no puede devolver una traducción falsa; si en la prueba real no sirve para nada, se puede quitar y simplificar.
+5. La descripción del manifiesto (`description`, la que sale en `chrome://extensions`) no dice que traduce al español. Cambiarla en la próxima versión, para no sacar una solo por eso.
+6. La ruta clásica de X, en la única medición real, no tradujo nada. Se queda como último recurso porque no puede devolver una traducción falsa; si en la prueba real no sirve para nada, se puede quitar y simplificar.
 
 ## Cómo continuar
 

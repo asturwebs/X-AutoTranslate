@@ -1,6 +1,6 @@
 # X AutoTranslate
 
-Extensión de Chrome que traduce por ti en X lo que va entrando en pantalla: las respuestas de un hilo, las citas y cualquier publicación que X no traduce sola.
+Extensión de Chrome que **traduce al español** por ti en X lo que va entrando en pantalla: las respuestas de un hilo, las citas y cualquier publicación que X no traduce sola.
 
 La última versión está en [Releases](https://github.com/asturwebs/X-AutoTranslate/releases/latest), en un zip listo para cargar en Chrome. El registro de cambios está en [CHANGELOG.md](CHANGELOG.md).
 
@@ -10,11 +10,12 @@ X ofrece traducción automática para los posts (se activa por idioma), pero no 
 
 ## Qué hace
 
-- Según scrolleas, traduce cada publicación visible que X dejó sin traducir.
+- Según scrolleas, traduce al español cada publicación visible que X dejó sin traducir.
 - Si X pone un enlace «Traducir publicación», lo pulsa.
 - Si no pone nada (es lo que pasa en las respuestas), le pide a X su traducción, a su propio servicio de traducción y con tu sesión, y la pone en el sitio del original, con la misma letra que el texto de X y una barra «Traducido del inglés · Mostrar original».
 - Con «Mostrar original» vuelves al texto de X; con «Mostrar traducción», a la traducción. Lo que devuelves al original no se vuelve a traducir en esa página.
 - Va de una en una y con ritmo: una petición cada vez, con un hueco aleatorio de 0,6 a 1,5 s.
+- **Va al idioma de tu interfaz de X**: español, si usas X en español. La extensión está hecha para X en español: su barra y sus botones están solo en español, y de los botones de X reconoce los de X en español y en inglés.
 
 ## Tu cuenta, por delante
 

@@ -1,6 +1,6 @@
 # CLAUDE.md — X AutoTranslate
 
-Extensión de Chrome (Manifest V3) que traduce por ti en X lo que entra en pantalla y X no traduce sola. Sin permisos, sin dependencias, sin build. Antes de tocar nada, lee `docs/HANDOFF.md` (estado, cómo probarla, lecciones) y el diseño de la v2 (`docs/superpowers/specs/2026-11-26-x-autotranslate-v2-design.md`).
+Extensión de Chrome (Manifest V3) que traduce al español por ti en X lo que entra en pantalla y X no traduce sola (al idioma de la interfaz de X; la extensión está hecha para X en español). Sin permisos, sin dependencias, sin build. Antes de tocar nada, lee `docs/HANDOFF.md` (estado, cómo probarla, lecciones) y el diseño de la v2 (`docs/superpowers/specs/2026-11-26-x-autotranslate-v2-design.md`).
 
 ## Dónde está cada cosa
 
