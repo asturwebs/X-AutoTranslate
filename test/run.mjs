@@ -55,7 +55,7 @@ chrome.stdio[4].on('data', (trozo) => {
     if (mensaje.id !== undefined) {
       contestaciones.get(mensaje.id)?.(mensaje);
       contestaciones.delete(mensaje.id);
-    } else if (mensaje.method === 'Runtime.consoleAPICalled' && mensaje.params.type === 'warn') {
+    } else if (mensaje.method === 'Runtime.consoleAPICalled' && mensaje.params.type === 'warning') {
       avisos.push(mensaje.params.args.map((a) => a.value ?? a.description ?? '').join(' '));
     } else if (mensaje.method === 'Runtime.exceptionThrown') {
       const { exception, text } = mensaje.params.exceptionDetails;

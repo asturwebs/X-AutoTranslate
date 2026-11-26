@@ -30,9 +30,20 @@
   }
 
   function alClic(pub) {
+    // El mismo elemento hace de «Mostrar original» una vez traducida la publicación:
+    // al pulsarlo, X vuelve al texto original.
+    if (pub.traducida) return mostrarOriginal(pub);
     clics.push({ id: pub.id, t: Math.round(performance.now() - t0) });
     if (pub.falla) return;
     setTimeout(() => (pub.redibuja ? pub.redibuja() : traducir(pub)), pub.retrasoMs);
+  }
+
+  // X vuelve al texto original y muestra «Traducir publicación» en un elemento nuevo.
+  function mostrarOriginal(pub) {
+    pub.traducida = false;
+    pub.texto.textContent = pub.original;
+    pub.texto.lang = pub.lang ?? 'en';
+    ponerControl(pub, botonDeTraducir('texto', () => alClic(pub)));
   }
 
   function botonDeTexto(texto) {
@@ -43,13 +54,13 @@
     return boton;
   }
 
-  function botonDeTraducir(variante, alPulsar) {
+  function botonDeTraducir(variante, alPulsar, etiqueta = 'Traducir publicación') {
     const boton = document.createElement('button');
     boton.type = 'button';
     boton.className = 'xat-traducir';
     const texto = document.createElement('span');
-    if (variante !== 'aria') texto.textContent = 'Traducir publicación';
-    if (variante === 'aria' || variante === 'ambos') boton.setAttribute('aria-label', 'Traducir publicación');
+    if (variante !== 'aria') texto.textContent = etiqueta;
+    if (variante === 'aria' || variante === 'ambos') boton.setAttribute('aria-label', etiqueta);
     if (variante === 'mixto') boton.setAttribute('aria-label', 'Traducir');
     boton.append(texto);
     boton.addEventListener('click', alPulsar);
@@ -107,7 +118,9 @@
     pub.hueco.append(boton);
   }
 
-  function crearPublicacion({ id, lang = 'en', boton = 'texto', retrasoMs = 50, falla = false }) {
+  function crearPublicacion({
+    id, lang = 'en', boton = 'texto', retrasoMs = 50, falla = false, yaTraducida = false, etiqueta,
+  }) {
     const articulo = document.createElement('article');
     articulo.className = 'xat-pub';
     articulo.dataset.xatId = id;
@@ -119,8 +132,18 @@
     const hueco = document.createElement('div');
     hueco.className = 'xat-control';
     articulo.append(texto, hueco);
-    const pub = { id, articulo, texto, hueco, original, retrasoMs, falla, traducida: false, control: null };
-    if (boton !== 'ninguno') ponerControl(pub, botonDeTraducir(boton, () => alClic(pub)));
+    const pub = {
+      id, articulo, texto, hueco, original, retrasoMs, falla, traducida: false, control: null, lang,
+    };
+    if (yaTraducida) {
+      // X ya la tradujo: texto en español y «Mostrar original».
+      pub.traducida = true;
+      texto.textContent = `ES: ${original}`;
+      texto.lang = 'es';
+      ponerControl(pub, botonDeTexto('Mostrar original'));
+    } else if (boton !== 'ninguno') {
+      ponerControl(pub, botonDeTraducir(boton, () => alClic(pub), etiqueta));
+    }
     publicaciones.set(id, pub);
     document.querySelector('main').append(articulo);
     return pub;
@@ -145,6 +168,21 @@
     crearPublicacion,
     crearHilo,
     texto: (id) => publicaciones.get(id)?.texto.textContent ?? null,
+    // El Socio pulsa «Mostrar original».
+    pulsarOriginal(id) {
+      publicaciones.get(id).control.click();
+    },
+    // X muestra el botón más tarde, en un artículo que ya estaba en la página.
+    anadirBoton(id, boton = 'texto') {
+      const pub = publicaciones.get(id);
+      ponerControl(pub, botonDeTraducir(boton, () => alClic(pub)));
+    },
+    // Navegación dentro de la SPA: desaparece todo lo montado y entra otra página.
+    sustituirPor(ids, boton = 'texto') {
+      for (const pub of publicaciones.values()) pub.articulo.remove();
+      publicaciones.clear();
+      for (const id of ids) crearPublicacion({ id, boton });
+    },
     irA(id) {
       publicaciones.get(id).articulo.scrollIntoView({ block: 'center' });
     },
@@ -339,6 +377,86 @@
         const deR1 = c.clics.filter(({ id }) => id === 'r1');
         if (deR1.length !== 2) fallos.push(`r1 recibió ${deR1.length} clics y debería recibir 2: falta el reintento al volver a pantalla`);
         else if (deR1[1].t < 4500) fallos.push(`el 2.º clic de r1 llegó en ${deR1[1].t} ms, antes de volver a pantalla`);
+        return fallos;
+      },
+    },
+
+    // Si el Socio pulsa «Mostrar original», esa publicación no se vuelve a traducir.
+    original: {
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'r1' });
+        c.crearPublicacion({ id: 'r2' });
+        await c.avanzar(1000);
+        c.pulsarOriginal('r1');
+        await c.avanzar(1500);
+      },
+      comprobar(c) {
+        const fallos = [];
+        if (c.texto('r1') !== 'Original r1') fallos.push(`r1 no se quedó en su texto original («${c.texto('r1')}»)`);
+        const clicsR1 = c.clics.filter(({ id }) => id === 'r1').length;
+        if (clicsR1 !== 1) fallos.push(`r1 recibió ${clicsR1} clics y debería recibir solo el primero`);
+        if (!c.texto('r2')?.startsWith('ES: ')) fallos.push(`r2 no está traducida («${c.texto('r2')}»)`);
+        return fallos;
+      },
+    },
+
+    // Lo que ya está en español o X ya tradujo no se toca; un botón que X dibuja más tarde sí.
+    sinBoton: {
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'es', lang: 'es', boton: 'ninguno' });
+        c.crearPublicacion({ id: 'auto', yaTraducida: true });
+        c.crearPublicacion({ id: 'tarde', boton: 'ninguno' });
+        await c.avanzar(600);
+        c.anadirBoton('tarde');
+        await c.avanzar(2000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        if (c.texto('es') !== 'Original es') fallos.push(`es estaba en español y cambió («${c.texto('es')}»)`);
+        if (c.texto('auto') !== 'ES: Original auto') fallos.push(`auto ya la había traducido X y cambió («${c.texto('auto')}»)`);
+        for (const id of ['es', 'auto']) {
+          if (c.clics.some(({ id: x }) => x === id)) fallos.push(`${id} recibió un clic sin tener botón de traducir`);
+        }
+        if (!c.texto('tarde')?.startsWith('ES: ')) fallos.push(`tarde no está traducida («${c.texto('tarde')}»)`);
+        if (c.clics.filter(({ id }) => id === 'tarde').length !== 1) fallos.push('tarde no recibió exactamente un clic');
+        return fallos;
+      },
+    },
+
+    // Cambiar de página dentro de X: lo que había desaparece con clics en cola y lo nuevo se traduce.
+    navegacion: {
+      async ejecutar(c) {
+        for (let i = 1; i <= 6; i++) c.crearPublicacion({ id: `r${i}`, retrasoMs: 800 });
+        await c.avanzar(700);
+        c.sustituirPor(['n1', 'n2', 'n3']);
+        await c.avanzar(4000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        for (const id of ['n1', 'n2', 'n3']) {
+          const n = c.clics.filter(({ id: x }) => x === id).length;
+          if (n !== 1) fallos.push(`${id} recibió ${n} clics y debería ser uno`);
+          if (!c.texto(id)?.startsWith('ES: ')) fallos.push(`${id} no está traducida («${c.texto(id)}»)`);
+        }
+        for (const { id, t } of c.clics) {
+          if (id.startsWith('r') && t > 700) fallos.push(`${id} recibió un clic después de desaparecer (en ${t} ms)`);
+        }
+        return fallos;
+      },
+    },
+
+    // Un botón casi igual pero que no está en la lista no se pulsa; se avisa en consola.
+    casi: {
+      ajustes: { DIAGNOSTICO_MS: 500 },
+      avisoEsperado: 'Traducir publicacion',
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'r1', etiqueta: 'Traducir publicacion' });
+        await c.avanzar(1500);
+      },
+      comprobar(c) {
+        const fallos = [];
+        if (c.clics.length) fallos.push(`hubo ${c.clics.length} clic(s) sobre una etiqueta que no está en la lista`);
+        if (c.texto('r1') !== 'Original r1') fallos.push(`r1 cambió de texto («${c.texto('r1')}»)`);
         return fallos;
       },
     },

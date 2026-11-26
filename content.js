@@ -15,6 +15,11 @@
     'Traducir publicación', 'Traducir post', 'Mostrar traducción',
     'Translate post', 'Show translation',
   ]);
+  // El enlace con el que X vuelve al texto original.
+  const ETIQUETAS_ORIGINAL = new Set(['Mostrar original', 'Show original']);
+
+  // Etiquetas que empiezan como una acción de traducir. «Traducido de…» es un estado, no un botón.
+  const PARECE_TRADUCCION = /^(traduc(?!id)|translat(?!ed)|mostrar trad|show trans)/i;
 
   // Tiempos en ms. __XAT_AJUSTES__ solo lo fija la bancada de pruebas.
   const RITMO = Object.freeze({
@@ -25,7 +30,8 @@
     REINTENTO_MS: 10000, // espera antes de reintentar una publicación que falló
     PAUSA_MS: 60000,     // pausa de la cola tras varios fallos seguidos
     FALLOS_PARA_PAUSA: 3,
-    REEXAMEN_MS: 150,    // pausa antes de volver a examinar los artículos con nodos nuevos
+    DIAGNOSTICO_MS: 5000, // cuándo avisar de botones de traducir que no están en la lista
+    REEXAMEN_MS: 150,     // pausa antes de volver a examinar los artículos con nodos nuevos
     ...globalThis.__XAT_AJUSTES__,
   });
 
@@ -33,17 +39,18 @@
   // 'pendiente' (pulsado, a la espera de X o de un reintento) o 'descartado' (ese elemento
   // no se vuelve a tocar).
   const estado = new WeakMap();
-  const observados = new Set();  // botones que sigue mirando el IntersectionObserver
-  const paradas = new Map();     // botón → temporizador de la parada
-  const pendientes = new Map();   // botón → momento del último clic, a la espera de X
-  const intentos = new WeakMap(); // botón → clics que ha recibido
-  const sucios = new Set();      // <article> con nodos nuevos desde el último examen
+  const observados = new Set();     // botones que sigue mirando el IntersectionObserver
+  const paradas = new Map();        // botón → temporizador de la parada
+  const pendientes = new Map();     // botón → momento del último clic, a la espera de X
+  const intentos = new WeakMap();   // botón → clics que ha recibido
+  const sucios = new Set();         // <article> con nodos nuevos desde el último examen
+  const revertidos = new WeakSet(); // <article> donde el Socio pulsó «Mostrar original»
   const cola = [];
   let ultimoClic = -Infinity;
-  let pausadoHasta = 0;          // la cola no pulsa nada hasta este momento
+  let pausadoHasta = 0;       // la cola no pulsa nada hasta este momento
   let fallosSeguidos = 0;
-  let temporizador = 0;          // próxima llamada a bombeo(), si la hay
-  let avisoEn = 0;               // momento en que dispararía ese temporizador
+  let temporizador = 0;       // próxima llamada a bombeo(), si la hay
+  let avisoEn = 0;            // momento en que dispararía ese temporizador
   let examenPendiente = false;
 
   function coincide(el, etiquetas) {
@@ -51,6 +58,7 @@
     return (aria !== null && etiquetas.has(aria.trim())) || etiquetas.has(el.textContent.trim());
   }
   const esBotonTraducir = (el) => coincide(el, ETIQUETAS_TRADUCIR);
+  const esBotonOriginal = (el) => coincide(el, ETIQUETAS_ORIGINAL);
 
   function enPantalla(el) {
     const r = el.getBoundingClientRect();
@@ -58,6 +66,8 @@
   }
 
   function examinar(article) {
+    // Donde el Socio volvió al original no se vuelve a traducir.
+    if (revertidos.has(article)) return;
     for (const el of article.querySelectorAll('button, [role="button"]')) {
       if (!estado.has(el) && esBotonTraducir(el)) registrar(el);
     }
@@ -70,7 +80,7 @@
   }
 
   function alEntrar(btn) {
-    if (estado.get(btn) !== 'visto' || paradas.has(btn)) return;
+    if (estado.get(btn) !== 'visto' || paradas.has(btn) || revertidos.has(btn.closest('article'))) return;
     paradas.set(btn, setTimeout(() => {
       paradas.delete(btn);
       if (estado.get(btn) === 'visto' && esBotonTraducir(btn) && enPantalla(btn)) encolar(btn);
@@ -209,6 +219,32 @@
       bombeo();
     }, RITMO.REEXAMEN_MS);
   }
+
+  // Una sola vez: si hay botones que parecen de traducir y no están en la lista, se avisa en
+  // consola con lo que se ha visto, para añadirlo. No se pulsa nada que no esté en la lista.
+  function diagnosticar() {
+    const vistas = new Set();
+    for (const el of document.querySelectorAll('article button, article [role="button"]')) {
+      for (const texto of [el.getAttribute('aria-label'), el.textContent]) {
+        const etiqueta = texto?.trim();
+        if (etiqueta && etiqueta.length <= 60 && PARECE_TRADUCCION.test(etiqueta)
+          && !ETIQUETAS_TRADUCIR.has(etiqueta) && !ETIQUETAS_ORIGINAL.has(etiqueta)) vistas.add(etiqueta);
+      }
+    }
+    if (vistas.size) {
+      console.warn(`[X AutoTranslate] No reconozco estos botones de traducir y no los pulso: «${[...vistas].join('», «')}». `
+        + 'Si es el botón de traducir de X, añádelo a ETIQUETAS_TRADUCIR en content.js.');
+    }
+  }
+
+  // Si el Socio vuelve al original, esa publicación no se vuelve a traducir.
+  document.addEventListener('click', (evento) => {
+    const boton = evento.target instanceof Element ? evento.target.closest('button, [role="button"]') : null;
+    const article = boton?.closest('article');
+    if (article && esBotonOriginal(boton)) revertidos.add(article);
+  }, true);
+
+  setTimeout(diagnosticar, RITMO.DIAGNOSTICO_MS);
 
   // X redibuja sin parar: cada nodo nuevo marca su artículo para el próximo examen.
   new MutationObserver((mutaciones) => {
