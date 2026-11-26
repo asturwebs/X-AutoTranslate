@@ -43,6 +43,8 @@ La extensión habla con X en tu nombre. Para no poner tu cuenta en riesgo:
 
 Riesgo que queda: X puede cambiar o limitar su servicio de traducción, o tomar estas peticiones por actividad automática. Por eso el techo, el ritmo y los paros.
 
+Si crees que has encontrado un agujero, dínoslo en privado en vez de en un issue: [SECURITY.md](SECURITY.md).
+
 ## Estado
 
 **v2.0.1.** Probada contra una página que simula a X, con un servicio de traducción falso; su forma de pedir la traducción, comprobada con una sesión real de X el 26-nov-2026; y la 2.0.0, probada entera en la X real: las respuestas de un hilo se traducen al bajar. La 2.0.1 corrige el tamaño y la letra del texto traducido, que salían más pequeños que los de X. Si no traduce, mira [Si no traduce](#si-no-traduce).

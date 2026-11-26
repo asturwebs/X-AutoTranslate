@@ -9,6 +9,7 @@ Extensión de Chrome (Manifest V3) que traduce al español por ti en X lo que en
 - `test/`: la bancada. `run.mjs` dirige un Chromium sin cabeza sobre `mock-x.html`; `driver.js` simula a X y su servicio de traducción.
 - `CHANGELOG.md`: qué cambia en cada versión.
 - `LICENSE`: licencia MIT del código (decisión del dueño del proyecto, 26-nov-2026).
+- `SECURITY.md`: cómo avisar de un problema de seguridad en privado (el aviso privado de GitHub está activado), qué cuenta como tal y qué no.
 - [Releases de GitHub](https://github.com/asturwebs/X-AutoTranslate/releases): cada versión publicada, con un zip listo para cargar en Chrome (`manifest.json`, `content.js`, `content.css`) y sus notas. Desde la versión que siga, el zip lleva también `LICENSE`.
 - `docs/`: handoff del proyecto, y los diseños y planes de la v1 y de la v2.
 
