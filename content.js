@@ -589,8 +589,11 @@
       }
       return { estado: respuesta.status, ms: Math.round(performance.now() - empieza), cabeceras, cuerpo };
     } catch (error) {
-      const fallo = new Error(error?.name === 'AbortError' ? 'tiempo agotado' : 'error de red');
-      fallo.tipo = error?.name === 'AbortError' ? 'timeout' : 'red';
+      // El corte por tiempo llega como «TimeoutError» (AbortSignal.timeout) o como «AbortError».
+      // Cualquier otra cosa es la red.
+      const aTiempo = error?.name === 'AbortError' || error?.name === 'TimeoutError';
+      const fallo = new Error(aTiempo ? 'tiempo agotado' : 'error de red');
+      fallo.tipo = aTiempo ? 'timeout' : 'red';
       throw fallo;
     }
   }
@@ -626,42 +629,38 @@
     let sinPermisoEnTodas = true;
     let ultimo = null;
     // El tope de tiempo vale para toda la publicación, no para cada ruta: agotado, no se sigue.
-    const controlador = new AbortController();
-    const tope = setTimeout(() => controlador.abort(), RITMO.PETICION_MAX_MS);
-    try {
-      while (porProbar.length) {
-        const ruta = porProbar.shift();
-        const fallo = { ruta, tipo: '', estado: 0, esperaMs: 0, detalle: '' };
-        if (controlador.signal.aborted) {
-          fallo.tipo = 'sinTiempo';
-        } else {
-          try {
-            const cruda = await abrirRuta(id, ruta, controlador.signal);
-            apuntarCupo(cruda.cabeceras);
-            fallo.estado = cruda.estado;
-            fallo.esperaMs = cruda.estado === 429 ? esperaTrasEl429(cruda) : 0;
-            if (cruda.estado === 200) {
-              const texto = ruta === 'clasico' ? textoClasico(cruda.cuerpo) : textoGrok(cruda.cuerpo);
-              if (texto) return texto;
-              fallo.tipo = 'vacia';
-              fallo.detalle = recorte(cruda.cuerpo);
-            } else {
-              fallo.tipo = 'estado';
-              fallo.detalle = recorte(cruda.cuerpo);
-            }
-          } catch (error) {
-            fallo.tipo = error.tipo;
+    // Una sola señal sirve para todas sus rutas.
+    const señal = AbortSignal.timeout(RITMO.PETICION_MAX_MS);
+    while (porProbar.length) {
+      const ruta = porProbar.shift();
+      const fallo = { ruta, tipo: '', estado: 0, esperaMs: 0, detalle: '' };
+      if (señal.aborted) {
+        fallo.tipo = 'sinTiempo';
+      } else {
+        try {
+          const cruda = await abrirRuta(id, ruta, señal);
+          apuntarCupo(cruda.cabeceras);
+          fallo.estado = cruda.estado;
+          fallo.esperaMs = cruda.estado === 429 ? esperaTrasEl429(cruda) : 0;
+          if (cruda.estado === 200) {
+            const texto = ruta === 'clasico' ? textoClasico(cruda.cuerpo) : textoGrok(cruda.cuerpo);
+            if (texto) return texto;
+            fallo.tipo = 'vacia';
+            fallo.detalle = recorte(cruda.cuerpo);
+          } else {
+            fallo.tipo = 'estado';
+            fallo.detalle = recorte(cruda.cuerpo);
           }
+        } catch (error) {
+          fallo.tipo = error.tipo;
         }
-        resultados.push(`${ruta}: ${describirFallo(fallo)}`);
-        sinPermisoEnTodas &&= fallo.estado === 401 || fallo.estado === 403;
-        ultimo = fallo;
-        if (fallo.estado === 429) break; // límite: no se insiste por otra ruta
-        if (ruta === 'grok' && fallo.estado === 404) porProbar.unshift('grok-api'); // la misma ruta en api.x.com
-        if (ruta !== 'clasico' && !porProbar.includes('clasico')) porProbar.push('clasico');
       }
-    } finally {
-      clearTimeout(tope);
+      resultados.push(`${ruta}: ${describirFallo(fallo)}`);
+      sinPermisoEnTodas &&= fallo.estado === 401 || fallo.estado === 403;
+      ultimo = fallo;
+      if (fallo.estado === 429) break; // límite: no se insiste por otra ruta
+      if (ruta === 'grok' && fallo.estado === 404) porProbar.unshift('grok-api'); // la misma ruta en api.x.com
+      if (ruta !== 'clasico' && !porProbar.includes('clasico')) porProbar.push('clasico');
     }
     const error = new Error(`probadas ${resultados.join(', ')}`);
     error.tipo = ultimo.tipo;
