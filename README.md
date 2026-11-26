@@ -11,13 +11,13 @@ X AutoTranslate no traduce nada por su cuenta, usa la traducción de X. Por eso 
 ## Qué hace
 
 - Según scrolleas, pulsa «Traducir publicación» en las publicaciones que entran en pantalla y X dejó sin traducir: respuestas, citas y cualquier post que muestre el botón.
-- Va de uno en uno y con ritmo, y no acumula peticiones mientras X tarda en responder, para no chocar con el límite de peticiones de X.
+- Va de uno en uno, con un hueco aleatorio de 0,6 a 1,5 s entre clics, y no acumula peticiones mientras X tarda en responder, para no chocar con el límite de peticiones de X ni ir a golpe fijo.
 - Si X no responde a un clic, lo reintenta una vez; después deja esa publicación en paz.
 - No tiene interfaz: X muestra la traducción y su enlace «Mostrar original», igual que al pulsar a mano. Si pulsas «Mostrar original», esa publicación no se vuelve a traducir mientras sigas en esa página.
 
 ## Estado
 
-**v1.0.0, sin estrenar en la X real.** Está probada contra una página que simula a X (12 escenarios) y todavía no en la página de verdad. Si no traduce, mira [Si no traduce](#si-no-traduce).
+**v1.0.0, sin estrenar en la X real.** Está probada contra una página que simula a X (16 escenarios) y todavía no en la página de verdad. Si no traduce, mira [Si no traduce](#si-no-traduce).
 
 ## Instalación
 
@@ -31,17 +31,18 @@ Para quitarla, «Quitar» en esa misma página.
 
 ## Seguridad
 
-- **Sin permisos.** No puede leer pestañas, cookies, historial ni portapapeles.
-- **Sin red.** No hace ninguna petición; la única que sale es la que hace X al traducir.
-- **Sin almacenamiento.** No guarda nada.
+- **Sin permisos.** El manifiesto no pide ninguno, así que la extensión no tiene acceso a las API de Chrome: ni pestañas, ni historial, ni portapapeles, ni almacenamiento.
+- **Sin red y sin almacenamiento.** El código no contiene ninguna llamada de red ni de almacenamiento. La única petición que sale es la que hace X al traducir.
 - **Sin dependencias ni código de terceros.**
-- **Clics cerrados.** Solo pulsa botones cuyo texto o `aria-label` coincide exactamente con una etiqueta de la lista `ETIQUETAS_TRADUCIR` de `content.js`, y solo dentro de un `<article>`.
+- **Corre dentro de la página de X.** Como cualquier content script, lo que ve es la página que tú ya estás viendo, con tu sesión. Este código solo lee la etiqueta de los botones y no modifica la página.
+- **Clics cerrados.** Solo pulsa botones cuyo nombre accesible coincide exactamente con una etiqueta de la lista `ETIQUETAS_TRADUCIR` de `content.js`, y solo dentro de un `<article>`. El nombre accesible es su `aria-label`; si no tiene, su texto. Un botón con el texto correcto pero otro `aria-label` no se pulsa.
 
 ## Si no traduce
 
 1. Abre x.com en una pestaña normal, no en la ventana de la web app.
-2. Pulsa F12 y ve a **Console**.
-3. Busca un aviso que empieza por `[X AutoTranslate]`.
+2. Pulsa F12 y ve a **Console**. Hazlo antes de nada: el aviso sale una sola vez, 5 s después de cargar la página.
+3. Recarga la página con abierto el hilo que no se traduce.
+4. Busca un aviso que empieza por `[X AutoTranslate]`.
 
 Si dice *No reconozco estos botones de traducir…*, X usa un texto que no está en la lista: añádelo a `ETIQUETAS_TRADUCIR` en `content.js` y pulsa el botón de recargar de la extensión.
 

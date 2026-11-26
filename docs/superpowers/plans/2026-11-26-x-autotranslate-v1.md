@@ -146,3 +146,10 @@ Estas son las decisiones de ejecución que cambian lo que dice el plan:
 - **Tarea 3:** el simulador trata el elemento reutilizado como «Mostrar original» una vez traducida la publicación.
 - **Total:** 12 escenarios, no 11.
 - **Tarea 4, paso 5:** el Socio dio autonomía total sobre el proyecto mientras estaba fuera; la subida no esperó su OK. La prueba en la X real sigue siendo suya.
+- **Tras la revisión final** (revisor independiente, veredicto «lista para fusionar, con arreglos»), en una sola pasada:
+  - el hueco entre clics pasa de 300 ms fijos a un sorteo de 600 a 1500 ms que no depende de la respuesta de X (escenario `sinEspera`);
+  - el plazo de fallo lleva su propio temporizador (escenario `falloTarde`, con `FALLO_MS` distinto de `ESPERA_MAX_MS`);
+  - la regla de la etiqueta vuelve a la de este plan: manda el `aria-label` si existe; `visible` afirma que la variante `mixto` no se pulsa;
+  - dos escenarios cubren las comprobaciones previas al clic (`manualEnCola`, `saleEnCola`).
+- **Total final:** 16 escenarios.
+- **Nombres reales:** el contrato del driver llama `crearPublicacion` a lo que aquí se dice `crearRespuesta`; el simulador fija `Math.random` con una secuencia por escenario para que los huecos sean reproducibles.
