@@ -1540,11 +1540,13 @@
     },
 
     // X no contesta nunca: la petición se corta al tope de tiempo. El tope es por publicación, no
-    // por ruta: agotado, no se prueba la siguiente.
+    // por ruta: agotado, no se prueba la siguiente. Y lo que se corta por tiempo se reconoce como
+    // tal (y no como un error de red): el aviso lo tiene que decir.
     topeDeTiempo: {
       sesion: true,
       ajustes: { PETICION_MAX_MS: 300, REINTENTO_MS: 500 },
       api: { latenciaMs: 5000 },
+      avisoEsperado: 'probadas grok: tiempo agotado, clasico: sin tiempo para probarla',
       async ejecutar(c) {
         c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'X takes forever here.' });
         await c.avanzar(3000);
@@ -1903,14 +1905,18 @@
       fin();
       throw new TypeError('Failed to fetch');
     }
+    // Como el fetch de verdad: corta con el motivo por el que se abortó la señal. Un controlador
+    // abortado a mano da «AbortError» y AbortSignal.timeout() da «TimeoutError»: imitar solo el
+    // primero taparía un fallo con el segundo.
     const abortada = await new Promise((resolver) => {
+      if (init.signal?.aborted) return resolver(true);
       const temporizador = setTimeout(() => resolver(false), regla.latenciaMs ?? 100);
       init.signal?.addEventListener('abort', () => { clearTimeout(temporizador); resolver(true); }, { once: true });
     });
     fin();
     if (abortada) {
       peticion.abortada = true;
-      throw new DOMException('The user aborted a request.', 'AbortError');
+      throw init.signal?.reason ?? new DOMException('The user aborted a request.', 'AbortError');
     }
     if (regla.estado && regla.estado !== 200) {
       const cuerpo = regla.cuerpo ?? JSON.stringify({ errors: [{ code: regla.estado, message: regla.mensaje ?? 'error simulado' }] });
