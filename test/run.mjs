@@ -3,8 +3,11 @@
 //
 // Abre cada escenario de test/driver.js en un Chromium sin cabeza y comprueba su
 // veredicto. Dirige el navegador por el canal de depuración (--remote-debugging-pipe,
-// sin puertos de depuración) y con un perfil temporal que se borra al salir: nunca toca el
-// perfil del usuario.
+// sin puertos de depuración) y con un perfil temporal que se borra al salir, también si se
+// corta con Ctrl+C: nunca toca el perfil del usuario.
+//
+// Antes de los escenarios comprueba manifest.json: ahí echa raíces lo que la extensión
+// promete sobre permisos y sobre dónde corre.
 //
 // La página de pruebas se sirve por HTTP en 127.0.0.1, con puerto aleatorio y solo mientras
 // duran las pruebas, porque las cookies (la sesión simulada de X) no existen sobre file://.
@@ -72,6 +75,78 @@ const chrome = spawn(BINARIO, [
 chrome.on('error', () => {});
 chrome.stdio[3].on('error', () => {});
 chrome.stdio[4].setEncoding('utf8');
+
+// ---- Salida y limpieza ----------------------------------------------------------------
+// Nada deja el perfil temporal huérfano: ni un final normal, ni un error, ni un Ctrl+C, ni un
+// `kill`. Chromium tiene que haber salido del todo antes de borrar su carpeta.
+let limpiando = null;
+let interrumpido = null; // código de salida si la pasada se cortó con una señal
+async function limpiar() {
+  limpiando ??= (async () => {
+    const vivo = () => chrome.exitCode === null && chrome.signalCode === null;
+    if (vivo()) {
+      const salido = new Promise((resolver) => chrome.once('exit', resolver));
+      chrome.kill();
+      await Promise.race([salido, new Promise((resolver) => setTimeout(resolver, 5_000))]);
+      if (vivo()) {
+        chrome.kill('SIGKILL');
+        await Promise.race([salido, new Promise((resolver) => setTimeout(resolver, 2_000))]);
+      }
+    }
+    rmSync(perfil, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    servidor.close();
+  })();
+  return limpiando;
+}
+for (const [senal, codigo] of [['SIGINT', 130], ['SIGTERM', 143]]) {
+  process.on(senal, async () => {
+    interrumpido = codigo;
+    await limpiar();
+    process.exit(codigo);
+  });
+}
+
+// ---- Manifiesto -----------------------------------------------------------------------
+// Lo que la extensión promete sobre permisos echa raíces en manifest.json, así que se comprueba
+// en cada pasada: sin claves de más (ni `permissions`, ni `host_permissions`, ni un guion en
+// otros marcos), corriendo solo en X y con la misma versión que la última del registro de
+// cambios. Se lee desde Node porque es un fichero: no hace falta un navegador.
+const CLAVES_DEL_MANIFIESTO = ['manifest_version', 'name', 'version', 'description', 'content_scripts'];
+const CLAVES_DEL_GUION = ['matches', 'js', 'css', 'run_at'];
+const ORIGENES = ['https://x.com/*', 'https://twitter.com/*'];
+async function comprobarManifiesto() {
+  let manifiesto;
+  try {
+    manifiesto = JSON.parse(await readFile(join(raiz, 'manifest.json'), 'utf8'));
+  } catch (error) {
+    return [`manifest.json no se puede leer: ${error.message}`];
+  }
+  if (!manifiesto || typeof manifiesto !== 'object') return ['manifest.json no es un objeto JSON'];
+  const fallos = [];
+  const deMas = (objeto, permitidas) => Object.keys(objeto).filter((clave) => !permitidas.includes(clave));
+  const sobran = deMas(manifiesto, CLAVES_DEL_MANIFIESTO);
+  if (sobran.length) fallos.push(`claves del manifiesto que no debería tener: ${sobran.join(', ')}`);
+  if (manifiesto.manifest_version !== 3) fallos.push(`manifest_version vale ${manifiesto.manifest_version} y debería valer 3`);
+  if (!/al español/.test(manifiesto.description ?? '')) fallos.push('la descripción no dice que traduce al español');
+  const guiones = manifiesto.content_scripts;
+  if (!Array.isArray(guiones) || guiones.length !== 1) {
+    fallos.push('content_scripts debería tener un único guion');
+  } else {
+    const [guion] = guiones;
+    const sobranDelGuion = deMas(guion, CLAVES_DEL_GUION);
+    if (sobranDelGuion.length) fallos.push(`claves del guion que no debería tener: ${sobranDelGuion.join(', ')}`);
+    if (JSON.stringify(guion.matches) !== JSON.stringify(ORIGENES)) {
+      fallos.push(`el guion corre en ${JSON.stringify(guion.matches)} y debería correr solo en ${JSON.stringify(ORIGENES)}`);
+    }
+  }
+  // La versión del manifiesto y la última del registro de cambios se suben siempre juntas.
+  const registro = await readFile(join(raiz, 'CHANGELOG.md'), 'utf8').catch(() => '');
+  const ultima = registro.match(/^## \[(\d+\.\d+\.\d+)\]/m)?.[1];
+  if (ultima !== manifiesto.version) {
+    fallos.push(`el manifiesto va por la ${manifiesto.version} y la última versión del registro de cambios es la ${ultima ?? '(ninguna)'}`);
+  }
+  return fallos;
+}
 
 // ---- Canal de depuración -------------------------------------------------------------
 
@@ -179,6 +254,8 @@ async function ejecutarEscenario(nombre, sesion) {
 
 let codigoDeSalida = 1;
 try {
+  const fallosDeManifiesto = await comprobarManifiesto();
+  console.log(fallosDeManifiesto.length ? `FAIL manifiesto — ${fallosDeManifiesto.join('; ')}` : 'PASS manifiesto');
   // Se usa la pestaña con la que arranca el navegador (la que está en primer plano), no una nueva.
   const { targetInfos } = await conPlazo(enviar('Target.getTargets'), ARRANQUE_MS, `Chromium no arranca (${BINARIO})`);
   const targetId = targetInfos.find((t) => t.type === 'page')?.targetId;
@@ -202,22 +279,19 @@ try {
   const desconocidos = pedidos.filter((n) => !nombres.includes(n));
   if (desconocidos.length) throw new Error(`escenarios que no existen: ${desconocidos.join(', ')}. Hay: ${nombres.join(', ')}`);
 
-  let pasados = 0;
+  let pasados = fallosDeManifiesto.length ? 0 : 1;
+  const escenarios = pedidos.length || nombres.length;
   for (const nombre of (pedidos.length ? pedidos : nombres)) {
     const { ok, fallos, ms } = await ejecutarEscenario(nombre, sessionId);
     pasados += ok ? 1 : 0;
     console.log(ok ? `PASS ${nombre} (${(ms / 1000).toFixed(1)} s)` : `FAIL ${nombre} (${(ms / 1000).toFixed(1)} s) — ${fallos.join('; ')}`);
   }
-  console.log(`${pasados}/${pedidos.length || nombres.length} escenarios`);
-  codigoDeSalida = pasados === (pedidos.length || nombres.length) ? 0 : 1;
+  const total = escenarios + 1; // el manifiesto cuenta como una comprobación más
+  console.log(`${pasados}/${total} comprobaciones: el manifiesto y ${escenarios} escenario${escenarios === 1 ? '' : 's'}`);
+  codigoDeSalida = pasados === total ? 0 : 1;
 } catch (error) {
   console.error(`ERROR ${error.message}`);
 } finally {
-  // Esperar a que Chromium haya salido del todo antes de borrar su perfil.
-  const salido = new Promise((resolver) => chrome.once('exit', resolver));
-  chrome.kill();
-  await Promise.race([salido, new Promise((resolver) => setTimeout(resolver, 5_000))]);
-  rmSync(perfil, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
-  servidor.close();
+  await limpiar();
 }
-process.exit(codigoDeSalida);
+process.exit(interrumpido ?? codigoDeSalida);

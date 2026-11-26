@@ -6,11 +6,30 @@ Cada build que se cargue en Chrome lleva su número. Se ve en `chrome://extensio
 
 ## [Sin publicar]
 
+Nada.
+
+## [2.0.2] - 2026-11-27
+
+No cambia cómo traduce. Esta versión acaba lo que quedaba suelto: lo que la extensión dice de sí misma, cómo se cortan sus peticiones y cómo se comprueba todo.
+
+### Cambiado
+
+- La descripción de la extensión (la que sale en `chrome://extensions`) dice ya que traduce al español y que complementa a la traducción de X.
+- El tope de tiempo de cada publicación (20 s para todas sus rutas) usa `AbortSignal.timeout()`, que es la forma recomendada, en vez de un temporizador hecho a mano.
+
 ### Añadido
 
-- Licencia MIT para el código (`LICENSE`). No cambia la extensión, así que no hace falta sacar una versión por esto.
+- Licencia MIT para el código (`LICENSE`).
 
-Lo que hay pendiente está en [docs/HANDOFF.md](docs/HANDOFF.md).
+### Corregido
+
+- La bancada de pruebas deja el sistema limpio también si se corta con Ctrl+C o con `kill`: antes dejaba huérfano el perfil temporal en `/tmp`.
+
+### Comprobado
+
+- La bancada comprueba en cada pasada `manifest.json`: sin claves de más (ni permisos), corriendo solo en x.com y twitter.com, y con la misma versión que la última de este registro.
+- El simulador de la bancada informa el corte de una petición como lo hace Chrome de verdad. Antes no, y eso habría dado por bueno el cambio del tope de tiempo: en Chrome real el corte llega con otro nombre.
+- La bancada entera en verde: 69 de 69 comprobaciones. El cambio del tope de tiempo se vio en rojo antes de arreglarse; la comprobación del manifiesto, rota de cinco maneras a propósito, cayó en rojo las cinco.
 
 ## [2.0.1] - 2026-11-26
 
@@ -59,6 +78,7 @@ La v1 solo pulsaba el botón «Traducir publicación» de X, y X no pone ese bot
 
 - **26-nov-2026, commit `e090492`** (número 1.0.0, sin cambiar): la v1 con una sonda que describía la página y hacía una petición por ruta a X, sin tocar nada. Solo para aprender el contrato y el DOM reales antes de construir la v2. Sin etiqueta.
 
+[2.0.2]: https://github.com/asturwebs/X-AutoTranslate/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/asturwebs/X-AutoTranslate/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/asturwebs/X-AutoTranslate/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/asturwebs/X-AutoTranslate/tree/v1.0.0
