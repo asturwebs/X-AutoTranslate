@@ -1,9 +1,9 @@
 // Simulador de X para la bancada de X AutoTranslate.
 //
-// Carga antes que ../content.js para fijar los ajustes del escenario antes de que
-// arranque la extensión. El nombre del escenario llega en el ancla de la URL
-// (mock-x.html#visible). Cada escenario recibe un contexto `ctx`, monta sus
-// publicaciones, espera lo que necesite y deja su veredicto en window.__result.
+// Carga antes que ../content.js para fijar, antes de que arranque la extensión, los ajustes
+// del escenario, el azar, la sesión y el servicio de traducción de X. El nombre del escenario
+// llega en el ancla de la URL (mock-x.html#visible). Cada escenario recibe un contexto `ctx`,
+// monta sus publicaciones, espera lo que necesite y deja su veredicto en window.__result.
 (() => {
   'use strict';
 
@@ -11,8 +11,11 @@
   const escenarios = {};
   window.__xatEscenarios = escenarios;
 
-  const publicaciones = new Map();
-  const clics = [];
+  const publicaciones = new Map(); // id del escenario → publicación
+  const porNumero = new Map();     // identificador numérico → publicación
+  const clics = [];                // clics en los botones de traducir de X
+  const peticiones = [];           // peticiones al servicio de traducción de X
+  let siguienteNumero = 1000;
   let t0 = 0;
 
   const avanzar = (ms) => new Promise((resolver) => setTimeout(resolver, ms));
@@ -22,7 +25,7 @@
   function traducir(pub) {
     if (pub.traducida) return;
     pub.traducida = true;
-    pub.texto.textContent = `ES: ${pub.original}`;
+    pub.texto.textContent = pub.traduccion ?? `ES: ${pub.original}`;
     pub.texto.lang = 'es';
     // El mismo elemento pasa a «Mostrar original» (si el control sigue ahí).
     if (!pub.control) return;
@@ -73,50 +76,7 @@
     return boton;
   }
 
-  // Hilo cuyo post principal cita otra publicación. Cada uno lleva su botón de traducir.
-  // Traducir el principal redibuja el contenido del artículo: el <article> es el mismo
-  // elemento, pero todos sus hijos son nuevos.
-  function crearHilo({ id, cita, retrasoMs = 50 }) {
-    const principal = { id, original: `Original ${id}`, retrasoMs, falla: false, traducida: false };
-    const citada = { id: cita, original: `Original ${cita}`, retrasoMs, falla: false, traducida: false };
-    const articulo = document.createElement('article');
-    articulo.className = 'xat-pub xat-hilo';
-    const bloque = (pub) => {
-      const texto = document.createElement('div');
-      texto.setAttribute('data-testid', 'tweetText');
-      texto.lang = pub.traducida ? 'es' : 'en';
-      texto.textContent = pub.traducida ? `ES: ${pub.original}` : pub.original;
-      const hueco = document.createElement('div');
-      hueco.className = 'xat-control';
-      pub.texto = texto;
-      pub.hueco = hueco;
-      pub.control = null;
-      const caja = document.createElement('div');
-      caja.className = 'xat-bloque';
-      caja.append(texto, hueco);
-      if (pub.traducida) ponerControl(pub, botonDeTexto('Mostrar original'));
-      else ponerControl(pub, botonDeTraducir('texto', () => alClic(pub)));
-      return caja;
-    };
-    const montar = () => {
-      const marco = document.createElement('div');
-      marco.setAttribute('role', 'link');
-      marco.className = 'xat-cita';
-      marco.append(bloque(citada));
-      articulo.replaceChildren(bloque(principal), marco);
-    };
-    principal.redibuja = () => {
-      principal.traducida = true;
-      montar();
-    };
-    montar();
-    for (const pub of [principal, citada]) {
-      pub.articulo = articulo;
-      publicaciones.set(pub.id, pub);
-    }
-    document.querySelector('main').append(articulo);
-    return articulo;
-  }
+  // ---- Construcción de publicaciones ----------------------------------------------
 
   function ponerControl(pub, boton) {
     pub.control?.remove();
@@ -124,42 +84,127 @@
     pub.hueco.append(boton);
   }
 
-  function crearPublicacion({
-    id, lang = 'en', boton = 'texto', retrasoMs = 50, falla = false, yaTraducida = false, etiqueta,
-    quitaControl = false,
-  }) {
-    const articulo = document.createElement('article');
-    articulo.className = 'xat-pub';
-    articulo.dataset.xatId = id;
-    const texto = document.createElement('div');
-    texto.setAttribute('data-testid', 'tweetText');
-    texto.lang = lang;
-    const original = `Original ${id}`;
-    texto.textContent = original;
-    const hueco = document.createElement('div');
-    hueco.className = 'xat-control';
-    articulo.append(texto, hueco);
-    const pub = {
-      id, articulo, texto, hueco, original, retrasoMs, falla, traducida: false, control: null, lang, quitaControl,
-    };
-    if (yaTraducida) {
-      // X ya la tradujo: texto en español y «Mostrar original».
-      pub.traducida = true;
-      texto.textContent = `ES: ${original}`;
-      texto.lang = 'es';
-      ponerControl(pub, botonDeTexto('Mostrar original'));
-    } else if (boton !== 'ninguno') {
-      ponerControl(pub, botonDeTraducir(boton, () => alClic(pub), etiqueta));
+  function ponerControles(pub) {
+    // A lo que X ya tradujo no le pone control debajo: su «Mostrar original» va en la barra.
+    if (pub.traducidaPorX) return;
+    if (pub.traducida) ponerControl(pub, botonDeTexto('Mostrar original'));
+    else if (pub.boton !== 'ninguno') ponerControl(pub, botonDeTraducir(pub.boton, () => alClic(pub), pub.etiqueta));
+  }
+
+  // Lo que X pone en una publicación: enlace permanente, su barra si ya la tradujo, texto y control.
+  function hijosDe(pub) {
+    const hijos = [];
+    if (pub.enlace) {
+      const cabecera = document.createElement('div');
+      cabecera.className = 'xat-cab';
+      pub.enlaceEl = document.createElement('a');
+      pub.enlaceEl.href = `/usuario/status/${pub.numerico}`;
+      const hora = document.createElement('time');
+      hora.textContent = '6 h';
+      pub.enlaceEl.append(hora);
+      cabecera.append(pub.enlaceEl);
+      hijos.push(cabecera);
     }
-    publicaciones.set(id, pub);
-    document.querySelector('main').append(articulo);
+    if (pub.traducidaPorX) {
+      const barra = document.createElement('div');
+      barra.className = 'xat-barra-x';
+      const origen = document.createElement('span');
+      origen.textContent = 'Traducido del inglés';
+      const enlaceOriginal = document.createElement('button');
+      enlaceOriginal.type = 'button';
+      enlaceOriginal.textContent = 'Mostrar original';
+      enlaceOriginal.addEventListener('click', () => {
+        pub.traducidaPorX = false;
+        montarPublicacion(pub);
+      });
+      barra.append(origen, enlaceOriginal);
+      hijos.push(barra);
+    }
+    pub.texto = document.createElement('div');
+    pub.texto.setAttribute('data-testid', 'tweetText');
+    // Ojo: cuando X traduce, el bloque conserva el idioma original. La extensión no puede
+    // guiarse solo por `lang` para saber que X ya tradujo.
+    pub.texto.lang = pub.traducida ? 'es' : pub.lang;
+    pub.texto.textContent = pub.traducida || pub.traducidaPorX ? (pub.traduccion ?? `ES: ${pub.original}`) : pub.original;
+    pub.hueco = document.createElement('div');
+    pub.hueco.className = 'xat-control';
+    pub.control = null;
+    hijos.push(pub.texto, pub.hueco);
+    return hijos;
+  }
+
+  function montarPublicacion(pub) {
+    pub.articulo.replaceChildren(...(pub.remontar ? pub.remontar() : hijosDe(pub)));
+    ponerControles(pub);
+    for (const otra of pub.otras ?? []) ponerControles(otra);
+  }
+
+  function crearPublicacion(opciones) {
+    const pub = {
+      lang: 'en', boton: 'texto', retrasoMs: 50, falla: false, quitaControl: false, enlace: true,
+      traduccion: null, traducida: false, traducidaPorX: false, ...opciones,
+    };
+    pub.original = opciones.texto ?? `Original ${pub.id}`;
+    pub.numerico = pub.enlace ? String(siguienteNumero++) : '';
+    pub.articulo = document.createElement('article');
+    pub.articulo.className = 'xat-pub';
+    pub.articulo.dataset.xatId = pub.id;
+    if (opciones.yaTraducida) pub.traducida = true;
+    montarPublicacion(pub);
+    publicaciones.set(pub.id, pub);
+    if (pub.numerico) porNumero.set(pub.numerico, pub);
+    document.querySelector('main').append(pub.articulo);
     return pub;
+  }
+
+  // El post principal de un hilo, que X ya tradujo solo: barra delante y texto en español.
+  function crearTraducidaPorX({ id, texto, traduccion }) {
+    const pub = crearPublicacion({ id, boton: 'ninguno', texto, traduccion });
+    pub.traducidaPorX = true;
+    montarPublicacion(pub);
+    return pub;
+  }
+
+  // Hilo cuyo post principal cita otra publicación. Cada una lleva su enlace permanente y,
+  // si `boton` no es 'ninguno', su botón de traducir. Traducir el principal redibuja el
+  // contenido del artículo: el <article> es el mismo elemento, pero todos sus hijos son nuevos.
+  function crearHilo({ id, cita, retrasoMs = 50, boton = 'texto' }) {
+    const principal = crearPublicacion({ id, boton, retrasoMs });
+    principal.articulo.classList.add('xat-hilo');
+    const citada = {
+      id: cita, lang: 'en', boton, retrasoMs, falla: false, quitaControl: false, enlace: true,
+      traduccion: null, traducida: false, traducidaPorX: false,
+      original: `Original ${cita}`, numerico: String(siguienteNumero++), articulo: principal.articulo,
+    };
+    principal.otras = [citada];
+    const bloque = (pub) => {
+      const caja = document.createElement('div');
+      caja.className = 'xat-bloque';
+      caja.append(...hijosDe(pub));
+      return caja;
+    };
+    principal.remontar = () => {
+      const marco = document.createElement('div');
+      marco.setAttribute('role', 'link');
+      marco.className = 'xat-cita';
+      marco.append(bloque(citada));
+      return [bloque(principal), marco];
+    };
+    principal.redibuja = () => {
+      principal.traducida = true;
+      montarPublicacion(principal);
+    };
+    montarPublicacion(principal);
+    publicaciones.set(cita, citada);
+    porNumero.set(citada.numerico, citada);
+    return principal.articulo;
   }
 
   // ---- Contexto que reciben los escenarios -----------------------------------------
 
   function calcularVisibleAlInicio() {
     return [...publicaciones.values()]
+      .filter(({ articulo }) => articulo.matches('article.xat-pub:not(.xat-hilo)'))
       .filter(({ control }) => control && !control.textContent.includes('Mostrar original'))
       .filter(({ control }) => {
         const r = control.getBoundingClientRect();
@@ -170,11 +215,27 @@
 
   const ctx = {
     clics,
+    peticiones,
     avanzar,
     memo: {},
     crearPublicacion,
     crearHilo,
+    crearTraducidaPorX,
     texto: (id) => publicaciones.get(id)?.texto.textContent ?? null,
+    // Identificador numérico de la publicación: lo que viaja a X en las peticiones.
+    numero: (id) => publicaciones.get(id)?.numerico ?? '',
+    // Nuestra caja de traducción (la que pone la extensión), o null.
+    cajaDe(id) {
+      const caja = publicaciones.get(id)?.texto.nextElementSibling;
+      return caja?.classList.contains('xat-caja') ? caja : null;
+    },
+    traduccionDe(id) {
+      const caja = ctx.cajaDe(id);
+      return caja && caja.getAttribute('data-xat-vista') !== 'original' ? (caja.querySelector('.xat-texto')?.textContent ?? null) : null;
+    },
+    originalVisible: (id) => (publicaciones.get(id)?.texto.getClientRects().length ?? 0) > 0,
+    enlaceDe: (id) => ctx.cajaDe(id)?.querySelector('.xat-enlace') ?? null,
+    nodoDe: (id) => publicaciones.get(id)?.texto ?? null,
     // El Socio pulsa «Mostrar original».
     pulsarOriginal(id) {
       publicaciones.get(id).control.click();
@@ -215,16 +276,39 @@
       soltar('dialogo', 'dialog');
       soltar('tarjeta', 'complementary', 'xat-tarjeta');
     },
+    // X redibuja el artículo de una publicación: el mismo <article>, con hijos nuevos.
+    redibujar(id) {
+      montarPublicacion(publicaciones.get(id));
+    },
+    // X reutiliza el mismo bloque de texto para otra publicación.
+    reutilizar(id, nuevoId, texto) {
+      const pub = publicaciones.get(id);
+      pub.texto.textContent = texto;
+      pub.texto.lang = 'en';
+      pub.numerico = String(siguienteNumero++);
+      pub.enlaceEl.href = `/usuario/status/${pub.numerico}`;
+      const nuevo = { ...pub, id: nuevoId, original: texto, traduccion: null };
+      publicaciones.set(nuevoId, nuevo);
+      porNumero.set(nuevo.numerico, nuevo);
+    },
     get visibleAlInicio() {
       const valor = calcularVisibleAlInicio();
       Object.defineProperty(this, 'visibleAlInicio', { value: valor, enumerable: true });
       return valor;
     },
   };
-
   // ---- Escenarios ------------------------------------------------------------------
 
   const recuentos = (lista) => lista.reduce((mapa, { id }) => ((mapa[id] = (mapa[id] ?? 0) + 1), mapa), {});
+
+  // Respuestas en inglés del escenario `hilo`: [id, texto, traducción que devuelve X].
+  const RESPUESTAS_HILO = [
+    ['r1', 'My reviewer. Other model. Other instance.', 'Mi revisor. Otro modelo. Otra instancia.'],
+    ['r2', 'Then I will do the merge.', 'Entonces haré el merge.'],
+    ['r3', 'Same here, unfortunately.', 'Lo mismo por aquí, lamentablemente.'],
+    ['r4', 'Totally agree with this.', 'Totalmente de acuerdo con esto.'],
+    ['r5', 'Well said.', 'Bien dicho.'],
+  ];
 
   Object.assign(escenarios, {
     // Solo se pulsa lo que está en pantalla, de una en una, y al scrollear se pulsa lo nuevo.
@@ -570,6 +654,346 @@
       },
     },
 
+    // Tarea 0: la sonda describe la página y hace una petición por ruta, sin tocar nada.
+    sonda: {
+      sesion: true,
+      ajustes: { DIAGNOSTICO_MS: 500 },
+      avisosEsperados: ['[X AutoTranslate SONDA]', 'sesión: sí', 'idioma de la interfaz: es', 'grok: 200', 'grok-api: 404', 'clasico: 200'],
+      unSoloAviso: '[X AutoTranslate SONDA]',
+      api(id, ruta) {
+        return ruta === 'grok-api' ? { estado: 404 } : { latenciaMs: 100 };
+      },
+      async ejecutar(c) {
+        c.crearTraducidaPorX({ id: 'principal', texto: 'Anthropic studied ~300 implementations.' });
+        for (let i = 1; i <= 4; i++) c.crearPublicacion({ id: `r${i}`, boton: 'ninguno', texto: `Reply number ${i}.` });
+        await c.avanzar(2000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        for (const id of ['principal', 'r1', 'r2', 'r3', 'r4']) {
+          if (c.cajaDe(id)) fallos.push(`${id} recibió una caja: la sonda no debe tocar la página`);
+          if (!c.originalVisible(id)) fallos.push(`el original de ${id} no está a la vista`);
+        }
+        const rutas = c.peticiones.map(({ ruta }) => ruta);
+        if (JSON.stringify(rutas) !== JSON.stringify(['grok', 'grok-api', 'clasico'])) {
+          fallos.push(`la sonda hizo ${JSON.stringify(rutas)} y debería hacer una petición por ruta, en ese orden`);
+        }
+        if (c.peticiones.some(({ id }) => id !== c.numero('r1'))) fallos.push('la sonda pidió algo que no es el primer candidato');
+        return fallos;
+      },
+    },
+
+    // El caso real: X traduce solo el post principal del hilo; las respuestas llegan sin enlace
+    // de traducir y la extensión se las tiene que pedir a X.
+    hilo: {
+      sesion: true,
+      api: { latenciaMs: 100 },
+      async ejecutar(c) {
+        c.crearTraducidaPorX({ id: 'principal', texto: 'Anthropic studied ~300 implementations.' });
+        for (const [id, texto, traduccion] of RESPUESTAS_HILO) c.crearPublicacion({ id, boton: 'ninguno', texto, traduccion });
+        c.crearPublicacion({ id: 'es', lang: 'es', boton: 'ninguno', texto: 'Totalmente de acuerdo.' });
+        await c.avanzar(5000);
+        c.memo.fase1 = {
+          principal: c.texto('principal'),
+          es: c.texto('es'),
+          pedidas: c.peticiones.map(({ id }) => id),
+        };
+        c.irA('r4'); // entran en pantalla r3, r4 y r5
+        await c.avanzar(4000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        const { fase1 } = c.memo;
+        if (c.cajaDe('principal') || c.cajaDe('es')) fallos.push('la extensión puso su caja donde X ya tradujo o donde el texto ya está en español');
+        if (c.texto('principal') !== fase1.principal || c.texto('es') !== fase1.es) fallos.push('cambió el texto de una publicación que no debía tocarse');
+        if (fase1.pedidas.some((n) => n === c.numero('principal') || n === c.numero('es'))) fallos.push('se pidió a X una publicación que ya estaba traducida o en español');
+        for (const [id, , traduccion] of RESPUESTAS_HILO) {
+          if (c.traduccionDe(id) !== traduccion) fallos.push(`${id} no muestra su traducción («${c.traduccionDe(id)}»)`);
+          if (c.originalVisible(id)) fallos.push(`${id} sigue enseñando el original junto a la traducción`);
+        }
+        if (JSON.stringify(fase1.pedidas) !== JSON.stringify([c.numero('r1'), c.numero('r2')])) {
+          fallos.push(`sin scrollear se pidió ${JSON.stringify(fase1.pedidas)} y debería ser solo r1 y r2, en ese orden`);
+        }
+        const [p1, p2] = c.peticiones;
+        if (p1 && p2 && p2.inicio - p1.fin < 580) fallos.push(`la 2.ª petición empezó ${p2.inicio - p1.fin} ms después del fin de la 1.ª (mínimo 580)`);
+        if (c.peticiones.length !== 6) fallos.push(`se hicieron ${c.peticiones.length} peticiones y deberían ser 6`);
+        if (c.peticiones.some(({ cabeceras }) => cabeceras['x-csrf-token'] !== 'prueba-csrf' || !String(cabeceras.authorization).startsWith('Bearer '))) {
+          fallos.push('a alguna petición le falta la sesión (x-csrf-token o authorization)');
+        }
+        if (!c.cajaDe('r1')?.textContent.includes('Traducido del inglés')) fallos.push('la caja no dice de qué idioma viene la traducción');
+        if (c.enlaceDe('r1')?.textContent !== 'Mostrar original') fallos.push('la caja no lleva un botón «Mostrar original»');
+        return fallos;
+      },
+    },
+
+    // Nuestro «Mostrar original» enseña el original y deja volver a la traducción, sin volver a pedirla.
+    vueltaNuestra: {
+      sesion: true,
+      api: { latenciaMs: 100 },
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'Nice thread, thanks for sharing.' });
+        c.crearPublicacion({ id: 'r2', boton: 'ninguno', texto: 'Totally agree.' });
+        await c.avanzar(2500);
+        c.enlaceDe('r1')?.click();
+        await c.avanzar(500);
+        c.memo.fase1 = {
+          original: c.originalVisible('r1'),
+          traduccion: c.traduccionDe('r1'),
+          enlace: c.enlaceDe('r1')?.textContent ?? null,
+          pedidas: c.peticiones.length,
+        };
+        c.enlaceDe('r1')?.click();
+        await c.avanzar(500);
+      },
+      comprobar(c) {
+        const fallos = [];
+        const f = c.memo.fase1;
+        if (!f.original) fallos.push('tras pulsar «Mostrar original», el original sigue oculto');
+        if (f.traduccion !== null) fallos.push('tras pulsar «Mostrar original», la traducción sigue a la vista');
+        if (f.enlace !== 'Mostrar traducción') fallos.push(`tras mostrar el original, el enlace dice «${f.enlace}» y debería decir «Mostrar traducción»`);
+        if (f.pedidas !== 2) fallos.push(`se hicieron ${f.pedidas} peticiones y deberían ser 2`);
+        if (c.originalVisible('r1')) fallos.push('tras volver a la traducción, el original sigue a la vista');
+        if (c.traduccionDe('r1') !== 'ES: Nice thread, thanks for sharing.') fallos.push(`tras volver, no se ve la traducción («${c.traduccionDe('r1')}»)`);
+        if (c.enlaceDe('r1')?.textContent !== 'Mostrar original') fallos.push(`el enlace no volvió a «Mostrar original» («${c.enlaceDe('r1')?.textContent}»)`);
+        if (c.peticiones.length !== 2) fallos.push(`volver a la traducción hizo peticiones nuevas (${c.peticiones.length} en total)`);
+        return fallos;
+      },
+    },
+
+    // X redibuja una respuesta ya traducida: la traducción vuelve a aparecer y no se vuelve a pedir.
+    redisadoApi: {
+      sesion: true,
+      api: { latenciaMs: 100 },
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'First one.' });
+        c.crearPublicacion({ id: 'r2', boton: 'ninguno', texto: 'Second one.' });
+        await c.avanzar(2500);
+        c.redibujar('r1');
+        await c.avanzar(700);
+      },
+      comprobar(c) {
+        const fallos = [];
+        if (c.traduccionDe('r1') !== 'ES: First one.') fallos.push(`tras redibujar, r1 no muestra su traducción («${c.traduccionDe('r1')}»)`);
+        if (c.originalVisible('r1')) fallos.push('tras redibujar, el original de r1 está a la vista');
+        if (c.peticiones.length !== 2) fallos.push(`se hicieron ${c.peticiones.length} peticiones y deberían ser 2: la traducción se pidió otra vez`);
+        return fallos;
+      },
+    },
+
+    // Una cita dentro de una respuesta, las dos sin enlace: cada una se pide por su propio identificador.
+    citaSinBoton: {
+      sesion: true,
+      api: { latenciaMs: 100 },
+      async ejecutar(c) {
+        c.crearHilo({ id: 'h1', cita: 'q1', boton: 'ninguno' });
+        await c.avanzar(3000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        for (const id of ['h1', 'q1']) {
+          if (c.traduccionDe(id) !== `ES: Original ${id}`) fallos.push(`${id} no muestra su traducción («${c.traduccionDe(id)}»)`);
+        }
+        const pedidas = c.peticiones.map(({ id }) => id);
+        if (JSON.stringify(pedidas) !== JSON.stringify([c.numero('h1'), c.numero('q1')])) {
+          fallos.push(`se pidió ${JSON.stringify(pedidas)} y debería ser h1 y luego q1`);
+        }
+        return fallos;
+      },
+    },
+
+    // X reutiliza el mismo bloque de texto para otra publicación: se quita lo de la anterior.
+    nodoReutilizado: {
+      sesion: true,
+      api: { latenciaMs: 100 },
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'The first tweet.' });
+        c.crearPublicacion({ id: 'r2', boton: 'ninguno', texto: 'The second tweet.' });
+        await c.avanzar(2500);
+        c.memo.cajaVieja = c.cajaDe('r1');
+        c.memo.numeroViejo = c.numero('r1');
+        c.reutilizar('r1', 'r9', 'A completely different tweet.');
+        await c.avanzar(2500);
+      },
+      comprobar(c) {
+        const fallos = [];
+        if (c.memo.cajaVieja?.isConnected) fallos.push('la traducción de la publicación anterior sigue en el bloque');
+        if (c.traduccionDe('r9') !== 'ES: A completely different tweet.') fallos.push(`la publicación nueva no muestra su traducción («${c.traduccionDe('r9')}»)`);
+        if (c.originalVisible('r9')) fallos.push('la publicación nueva enseña el original junto a la traducción');
+        if (c.peticiones.filter(({ id }) => id === c.memo.numeroViejo).length !== 1) fallos.push('se volvió a pedir la publicación anterior');
+        return fallos;
+      },
+    },
+
+    // X responde 429: la cola espera lo que diga X y solo hay un reintento.
+    limite429: {
+      sesion: true,
+      ajustes: { PAUSA_MS: 1000 },
+      api: (() => {
+        let primera = true;
+        return () => (primera ? ((primera = false), { estado: 429, cabeceras: { 'retry-after': '2' } }) : { latenciaMs: 100 });
+      })(),
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'Rate limited once.' });
+        c.crearPublicacion({ id: 'r2', boton: 'ninguno', texto: 'Never limited.' });
+        await c.avanzar(6000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        for (const [id, texto] of [['r1', 'Rate limited once.'], ['r2', 'Never limited.']]) {
+          if (c.traduccionDe(id) !== `ES: ${texto}`) fallos.push(`${id} no está traducida («${c.traduccionDe(id)}»)`);
+        }
+        const deR1 = c.peticiones.filter(({ id }) => id === c.numero('r1'));
+        if (deR1.length !== 2) fallos.push(`r1 recibió ${deR1.length} peticiones y debería recibir 2`);
+        const [p1, p2] = c.peticiones;
+        if (p1 && p2 && p2.inicio - p1.fin < 1900) fallos.push(`tras el 429, la petición siguiente empezó ${p2.inicio - p1.fin} ms después de su fin (X dijo 2 s)`);
+        return fallos;
+      },
+    },
+
+    // X no encuentra una publicación (404): se deja en paz. A otra le falla Grok: se prueba el servicio clásico.
+    falloApi: {
+      sesion: true,
+      api(id, ruta) {
+        if (id === ctx.numero('r1')) return { estado: 404 };
+        if (id === ctx.numero('r2')) return ruta === 'clasico' ? { latenciaMs: 100 } : { estado: 500 };
+        return { latenciaMs: 100 };
+      },
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'This one is gone.' });
+        c.crearPublicacion({ id: 'r2', boton: 'ninguno', texto: 'Grok is down for this one.' });
+        await c.avanzar(3000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        if (c.cajaDe('r1')) fallos.push('la publicación que X no encuentra recibió una caja');
+        if (!c.originalVisible('r1')) fallos.push('el original de r1 no está a la vista');
+        if (c.traduccionDe('r2') !== 'ES: Grok is down for this one.') fallos.push(`r2 no está traducida («${c.traduccionDe('r2')}»)`);
+        const rutas = c.peticiones.filter(({ id }) => id === c.numero('r2')).map(({ ruta }) => ruta);
+        if (JSON.stringify(rutas) !== JSON.stringify(['grok', 'clasico'])) fallos.push(`por r2 se pidió ${JSON.stringify(rutas)} y debería ser grok y luego clasico`);
+        return fallos;
+      },
+    },
+
+    // X falla en todas sus rutas para una publicación: un reintento y se deja en paz; las demás siguen.
+    servidorCaido: {
+      sesion: true,
+      ajustes: { REINTENTO_MS: 1500 },
+      api(id) {
+        return id === ctx.numero('r1') ? { estado: 500 } : { latenciaMs: 100 };
+      },
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'Always broken.' });
+        c.crearPublicacion({ id: 'r2', boton: 'ninguno', texto: 'Perfectly fine.' });
+        await c.avanzar(5000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        const deR1 = c.peticiones.filter(({ id }) => id === c.numero('r1'));
+        if (c.cajaDe('r1')) fallos.push('la publicación que X no pudo traducir recibió una caja');
+        if (!c.originalVisible('r1')) fallos.push('el original de r1 no está a la vista');
+        if (deR1.length !== 4) fallos.push(`r1 recibió ${deR1.length} peticiones y debería recibir 4 (dos rutas, dos intentos)`);
+        if (c.traduccionDe('r2') !== 'ES: Perfectly fine.') fallos.push(`r2 no está traducida («${c.traduccionDe('r2')}”)`);
+        return fallos;
+      },
+    },
+
+    // Sin sesión no hay nada que pedir: no se hace ninguna petición y no se toca nada.
+    sinSesion: {
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'Not logged in here.' });
+        c.crearPublicacion({ id: 'r2', boton: 'ninguno', texto: 'Nothing to do.' });
+        await c.avanzar(2500);
+      },
+      comprobar(c) {
+        const fallos = [];
+        if (c.peticiones.length) fallos.push(`sin sesión se hicieron ${c.peticiones.length} peticiones`);
+        for (const id of ['r1', 'r2']) {
+          if (c.cajaDe(id)) fallos.push(`${id} recibió una caja sin sesión`);
+          if (!c.originalVisible(id)) fallos.push(`el original de ${id} no está a la vista`);
+        }
+        return fallos;
+      },
+    },
+
+    // X dice que no hay permiso (401): no se insiste; la siguiente petición espera el bloqueo de sesión.
+    sinPermiso: {
+      sesion: true,
+      ajustes: { SESION_BLOQUEADA_MS: 3000 },
+      api: { estado: 401 },
+      async ejecutar(c) {
+        for (let i = 1; i <= 3; i++) c.crearPublicacion({ id: `r${i}`, boton: 'ninguno', texto: `Reply number ${i}.` });
+        await c.avanzar(6000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        for (let i = 1; i <= 3; i++) {
+          if (c.cajaDe(`r${i}`)) fallos.push(`r${i} recibió una caja aunque X dijo que no hay permiso`);
+          if (!c.originalVisible(`r${i}`)) fallos.push(`el original de r${i} no está a la vista`);
+        }
+        if (c.peticiones.length !== 2) fallos.push(`se hicieron ${c.peticiones.length} peticiones y deberían ser 2 en 6 s`);
+        const [p1, p2] = c.peticiones;
+        if (p1 && p2 && p2.inicio - p1.fin < 2900) fallos.push(`tras el 401, la petición siguiente empezó ${p2.inicio - p1.fin} ms después de su fin (mínimo 2900)`);
+        return fallos;
+      },
+    },
+
+    // La respuesta llega en trozos, uno por línea: se concatenan.
+    trozos: {
+      sesion: true,
+      api: { trozos: 4 },
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'This is a fairly long reply so that it splits into several pieces.' });
+        await c.avanzar(2500);
+      },
+      comprobar(c) {
+        const fallos = [];
+        if (c.traduccionDe('r1') !== 'ES: This is a fairly long reply so that it splits into several pieces.') {
+          fallos.push(`los trozos no se montaron bien («${c.traduccionDe('r1')}”)`);
+        }
+        return fallos;
+      },
+    },
+
+    // A la ruta de Grok le falta (404): sirve la clásica.
+    clasico: {
+      sesion: true,
+      api(id, ruta) {
+        return ruta === 'clasico' ? { latenciaMs: 100 } : { estado: 404 };
+      },
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'Only the old service works.' });
+        c.crearPublicacion({ id: 'r2', boton: 'ninguno', texto: 'Same here.' });
+        await c.avanzar(3500);
+      },
+      comprobar(c) {
+        const fallos = [];
+        for (const [id, texto] of [['r1', 'Only the old service works.'], ['r2', 'Same here.']]) {
+          if (c.traduccionDe(id) !== `ES: ${texto}`) fallos.push(`${id} no está traducida («${c.traduccionDe(id)}”)`);
+          const rutas = c.peticiones.filter(({ id: x }) => x === c.numero(id)).map(({ ruta }) => ruta);
+          if (!rutas.includes('clasico')) fallos.push(`por ${id} no se pidió la ruta clásica (${JSON.stringify(rutas)})`);
+        }
+        return fallos;
+      },
+    },
+
+    // Lo que solo se cruza por pantalla no se pide; donde sí se está parado, sí.
+    vueloApi: {
+      sesion: true,
+      api: { latenciaMs: 100 },
+      async ejecutar(c) {
+        for (let i = 1; i <= 20; i++) c.crearPublicacion({ id: `r${i}`, boton: 'ninguno', texto: `Reply number ${i}.` });
+        await c.recorrerRapido(60);
+        await c.avanzar(3000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        const numeros = new Set(Array.from({ length: 17 }, (_, i) => c.numero(`r${i + 1}`)));
+        if (c.peticiones.some(({ id }) => numeros.has(id))) fallos.push('se pidió alguna publicación por la que solo se pasó por encima');
+        if (c.traduccionDe('r20') !== 'ES: Reply number 20.') fallos.push(`la última, donde sí se está parado, no está traducida («${c.traduccionDe('r20')}”)`);
+        return fallos;
+      },
+    },
+
     // X redibuja el hilo al traducir su post principal: la cita, con botón nuevo, también se traduce.
     redisado: {
       async ejecutar(c) {
@@ -590,16 +1014,62 @@
 
   // ---- Arranque --------------------------------------------------------------------
 
+  const definicion = escenarios[NOMBRE];
   // Los ajustes del escenario deben estar antes de que cargue la extensión.
-  globalThis.__XAT_AJUSTES__ = { ...(escenarios[NOMBRE]?.ajustes ?? {}) };
+  globalThis.__XAT_AJUSTES__ = { ...(definicion?.ajustes ?? {}) };
   // La extensión sortea el hueco entre clics con Math.random(). Para que cada escenario sea
   // reproducible, el simulador le da una secuencia fija (0 → siempre el hueco mínimo).
-  const azar = escenarios[NOMBRE]?.azar ?? [0];
+  const azar = definicion?.azar ?? [0];
   let tirada = 0;
   Math.random = () => azar[tirada++ % azar.length];
 
+  // Sesión: solo el escenario que la pide tiene la cookie ct0 de X.
+  document.cookie = 'ct0=; max-age=0; path=/';
+  document.cookie = 'lang=; max-age=0; path=/';
+  if (definicion?.sesion) {
+    document.cookie = 'ct0=prueba-csrf; path=/';
+    document.cookie = 'lang=es; path=/';
+  }
+
+  // Servicio de traducción de X: sustituye a window.fetch para sus rutas y deja pasar el resto.
+  // `api` es la regla de respuesta (o una función del identificador y de la ruta): latenciaMs,
+  // trozos, estado, cuerpo, mensaje y cabeceras.
+  const api = definicion?.api ?? {};
+  const fetchDeVerdad = window.fetch.bind(window);
+  const reglasDe = (id, ruta) => (typeof api === 'function' ? api(id, ruta) : api) ?? {};
+  window.fetch = async (recurso, init = {}) => {
+    const url = typeof recurso === 'string' ? recurso : recurso.url;
+    const metodo = (init.method ?? 'GET').toUpperCase();
+    const grok = metodo === 'POST' && /\/2\/grok\/translation\.json$/.test(url);
+    const clasico = metodo === 'GET' && /\/translation\/service\/translateTweet$/.test(url);
+    if (!grok && !clasico) return fetchDeVerdad(recurso, init);
+    const id = grok ? JSON.parse(init.body).id : url.match(/tweetId=(\d+)/)?.[1];
+    const ruta = grok ? (url.startsWith('https://api.x.com/') ? 'grok-api' : 'grok') : 'clasico';
+    const peticion = { id, ruta, cabeceras: { ...(init.headers ?? {}) }, inicio: Math.round(performance.now() - t0) };
+    peticiones.push(peticion);
+    const regla = reglasDe(id, ruta);
+    await avanzar(regla.latenciaMs ?? 100);
+    peticion.fin = Math.round(performance.now() - t0);
+    if (regla.estado && regla.estado !== 200) {
+      const cuerpo = regla.cuerpo ?? JSON.stringify({ errors: [{ code: regla.estado, message: regla.mensaje ?? 'error simulado' }] });
+      return new Response(cuerpo, { status: regla.estado, headers: regla.cabeceras ?? {} });
+    }
+    const pub = porNumero.get(String(id));
+    if (!pub) return new Response(JSON.stringify({ errors: [{ code: 34, message: 'La publicación no existe' }] }), { status: 404 });
+    const traduccion = pub.traduccion ?? `ES: ${pub.original}`;
+    if (clasico) {
+      const cuerpo = JSON.stringify({ translation: traduccion, sourceLanguage: pub.lang, destinationLanguage: 'es' });
+      return new Response(cuerpo, { status: 200 });
+    }
+    // La ruta de Grok contesta en trozos, uno por línea.
+    if (regla.cuerpo !== undefined) return new Response(regla.cuerpo, { status: 200 });
+    const trozos = regla.trozos ?? 1;
+    const piezas = trozos > 1 ? (traduccion.match(new RegExp(`[\\s\\S]{1,${Math.ceil(traduccion.length / trozos)}}`, 'g')) ?? []) : [traduccion];
+    const cuerpo = piezas.map((texto) => JSON.stringify({ result: { content_type: 'POST', text: texto, entities: {} } })).join('\n');
+    return new Response(cuerpo, { status: 200 });
+  };
+
   document.addEventListener('DOMContentLoaded', async () => {
-    const definicion = escenarios[NOMBRE];
     if (!definicion) {
       window.__result = { escenario: NOMBRE, ok: false, fallos: [`no existe el escenario «${NOMBRE}»`] };
       return;
@@ -607,6 +1077,13 @@
     t0 = performance.now();
     await definicion.ejecutar(ctx);
     const fallos = definicion.comprobar(ctx);
-    window.__result = { escenario: NOMBRE, ok: fallos.length === 0, fallos, avisoEsperado: definicion.avisoEsperado };
+    window.__result = {
+      escenario: NOMBRE,
+      ok: fallos.length === 0,
+      fallos,
+      avisoEsperado: definicion.avisoEsperado,
+      avisosEsperados: definicion.avisosEsperados,
+      unSoloAviso: definicion.unSoloAviso,
+    };
   });
 })();

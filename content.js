@@ -21,6 +21,15 @@
   // Etiquetas que empiezan como una acción de traducir. «Traducido de…» es un estado, no un botón.
   const PARECE_TRADUCCION = /^(traduc(?!id)|translat(?!ed)|mostrar trad|show trans)/i;
 
+  // Códigos con los que X marca un texto «sin idioma».
+  const SIN_IDIOMA = new Set(['', 'und', 'zxx', 'qam', 'qct', 'qht', 'qme', 'qst']);
+
+  // Clave pública del cliente web de X. No es un secreto: va a la vista en el código de x.com y
+  // en todos los clientes de código abierto, y solo sirve junto con una sesión.
+  // Procedencia: `Noctyn/x-native-translator`, `llpgf/x-grok-visible-translate` y
+  // `rien7/twitter-extension-api`. Si X la cambia, responde 401 aunque haya sesión.
+  const CLIENTE_PUBLICO_X = 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA';
+
   // Tiempos en ms. __XAT_AJUSTES__ solo lo fija la bancada de pruebas.
   const RITMO = Object.freeze({
     PARADA_MS: 300,      // cuánto tiene que estar el botón en pantalla antes de contar
@@ -33,6 +42,7 @@
     FALLOS_PARA_PAUSA: 3,
     DIAGNOSTICO_MS: 5000, // cuándo avisar de botones de traducir que no están en la lista
     REEXAMEN_MS: 150,     // pausa antes de volver a examinar los artículos con nodos nuevos
+    PETICION_MAX_MS: 20000, // tiempo máximo de una petición de traducción a X
     ...globalThis.__XAT_AJUSTES__,
   });
 
@@ -62,6 +72,69 @@
   }
   const esBotonTraducir = (el) => ETIQUETAS_TRADUCIR.has(etiqueta(el));
   const esBotonOriginal = (el) => ETIQUETAS_ORIGINAL.has(etiqueta(el));
+
+  // ── Lectura de la página ───────────────────────────────────────────────────────────────
+
+  // Lo que cuelga de nuestra propia interfaz queda fuera de todo escaneo.
+  const esNuestro = (el) => !!el.closest('.xat-caja');
+
+  function cookie(nombre) {
+    const hallado = document.cookie.match(new RegExp(`(?:^|; )${nombre}=([^;]*)`));
+    return hallado ? decodeURIComponent(hallado[1]) : '';
+  }
+
+  // Idioma base de la interfaz de X: la cookie `lang`, si es un código válido; si no, el de
+  // <html lang>; y si no, español. (X usa `xx` para «inglés por defecto».)
+  function idiomaDestino() {
+    const base = (texto) => texto.trim().toLowerCase().split('-')[0];
+    const valido = (idioma) => /^[a-z]{2,3}$/.test(idioma);
+    const deLaCookie = base(cookie('lang'));
+    const delHtml = base(document.documentElement.lang);
+    return (valido(deLaCookie) && deLaCookie) || (valido(delHtml) && delHtml) || 'es';
+  }
+
+  // La caja de cita de un bloque: el ancestro role="link" más cercano dentro del artículo.
+  function cajaDeCitaDe(nodo) {
+    const articulo = nodo.closest('article');
+    const caja = nodo.parentElement?.closest('[role="link"]');
+    return articulo && caja && articulo.contains(caja) ? caja : null;
+  }
+
+  const identificadorEn = (enlace) => enlace?.getAttribute('href')?.match(/\/status\/(\d+)/)?.[1] ?? '';
+
+  // Identificador de la publicación de un bloque, por su enlace permanente.
+  // Una cita solo se identifica por un enlace de su propia caja: nunca por el del post que la
+  // contiene. El post, por su enlace con `time` fuera de las cajas de cita.
+  function idDe(nodo) {
+    const articulo = nodo.closest('article');
+    if (!articulo) return '';
+    const caja = cajaDeCitaDe(nodo);
+    if (caja) {
+      const enlaces = [...caja.querySelectorAll('a[href*="/status/"]')];
+      return identificadorEn(enlaces.find((enlace) => enlace.querySelector('time')) ?? enlaces[0]);
+    }
+    const enlaces = [...articulo.querySelectorAll('a[href*="/status/"]')].filter((enlace) => !cajaDeCitaDe(enlace));
+    return identificadorEn(enlaces.find((enlace) => enlace.querySelector('time')) ?? enlaces[0]);
+  }
+
+  // X traduce solo el post principal de un hilo y pone su barra «Traducido de… · Mostrar
+  // original» delante del texto. El bloque conserva el idioma original, así que `lang` no basta
+  // para saberlo. ¿Hay un «Mostrar original» de X entre el bloque de texto anterior y este?
+  function traducidoPorX(nodo) {
+    const articulo = nodo.closest('article');
+    if (!articulo) return false;
+    const bloques = [...articulo.querySelectorAll('[data-testid="tweetText"]')];
+    const anterior = bloques[bloques.indexOf(nodo) - 1];
+    const antesDe = (quien, de) => (quien.compareDocumentPosition(de) & Node.DOCUMENT_POSITION_PRECEDING) !== 0;
+    for (const control of articulo.querySelectorAll('button, [role="button"], span')) {
+      if (esNuestro(control) || control.closest('[data-testid="tweetText"]')) continue;
+      if (!ETIQUETAS_ORIGINAL.has(etiqueta(control))) continue;
+      if (!antesDe(nodo, control)) continue;
+      if (anterior && antesDe(anterior, control)) continue;
+      return true;
+    }
+    return false;
+  }
 
   function enPantalla(el) {
     const r = el.getBoundingClientRect();
@@ -257,6 +330,138 @@
   }, true);
 
   setTimeout(diagnosticar, RITMO.DIAGNOSTICO_MS);
+
+  // ── Petición a X ───────────────────────────────────────────────────────────────────────
+
+  function cabecerasDeSesion() {
+    return {
+      authorization: `Bearer ${CLIENTE_PUBLICO_X}`,
+      'x-csrf-token': cookie('ct0'),
+      'x-twitter-auth-type': 'OAuth2Session',
+      'x-twitter-active-user': 'yes',
+      'x-twitter-client-language': idiomaDestino(),
+    };
+  }
+
+  const RUTA_GROK = '/i/api/2/grok/translation.json';
+  const RUTA_GROK_API = 'https://api.x.com/2/grok/translation.json';
+  const rutaClasico = (id, idioma) => '/i/api/1.1/strato/column/None/'
+    + `tweetId=${id},destinationLanguage=Some(${idioma}),translationSource=Some(X),feature=None,timeout=None,onlyCached=None`
+    + '/translation/service/translateTweet';
+
+  // Una petición cruda a una ruta de traducción de X. Devuelve lo que contestó; no lo interprete.
+  async function abrirRuta(id, ruta) {
+    const esGrok = ruta !== 'clasico';
+    const url = { grok: RUTA_GROK, 'grok-api': RUTA_GROK_API, clasico: rutaClasico(id, idiomaDestino()) }[ruta];
+    const controlador = new AbortController();
+    const tope = setTimeout(() => controlador.abort(), RITMO.PETICION_MAX_MS);
+    const empieza = performance.now();
+    try {
+      const respuesta = await fetch(url, {
+        method: esGrok ? 'POST' : 'GET',
+        credentials: 'include',
+        headers: esGrok ? { ...cabecerasDeSesion(), 'content-type': 'text/plain;charset=UTF-8' } : cabecerasDeSesion(),
+        body: esGrok ? JSON.stringify({ content_type: 'POST', id, dst_lang: idiomaDestino() }) : undefined,
+        signal: controlador.signal,
+      });
+      const cuerpo = await respuesta.text();
+      const cabeceras = {};
+      for (const nombre of ['content-type', 'retry-after', 'x-rate-limit-limit', 'x-rate-limit-remaining', 'x-rate-limit-reset']) {
+        cabeceras[nombre] = respuesta.headers.get(nombre);
+      }
+      return { estado: respuesta.status, ms: Math.round(performance.now() - empieza), cabeceras, cuerpo };
+    } catch (error) {
+      const fallo = new Error(error?.name === 'AbortError' ? 'tiempo agotado' : 'error de red');
+      fallo.tipo = error?.name === 'AbortError' ? 'timeout' : 'red';
+      throw fallo;
+    } finally {
+      clearTimeout(tope);
+    }
+  }
+
+  // ── Sonda: diagnóstico de la X real. No cambia nada en la página. ──────────────────────
+  // Describe lo que ve y hace UNA petición por ruta para el primer candidato, para fijar el
+  // contrato y el DOM reales antes de construir el resto. Se quita en cuanto sirve.
+
+  const MODO_SONDA = globalThis.__XAT_SONDA__ ?? true;
+
+  // Esquema de un elemento: etiqueta, atributos útiles e hijos, lo justo para reconocer la
+  // estructura sin volcar todo el HTML. Sin imágenes ni iconos.
+  function esquema(raiz, maxLineas = 45) {
+    const lineas = [];
+    const saltar = new Set(['svg', 'path', 'img', 'style', 'script', 'link']);
+    const recorrer = (nodo, nivel) => {
+      if (lineas.length >= maxLineas || nodo.nodeType !== 1 || saltar.has(nodo.localName)) return;
+      const partes = [nodo.localName];
+      for (const atributo of ['data-testid', 'role', 'lang', 'dir', 'aria-label', 'href', 'tabindex']) {
+        const valor = nodo.getAttribute(atributo);
+        if (valor !== null && valor !== '') partes.push(`${atributo}="${valor.slice(0, 60)}"`);
+      }
+      const texto = [...nodo.childNodes].filter((hijo) => hijo.nodeType === 3).map((hijo) => hijo.textContent.trim()).join(' ');
+      lineas.push(`${'  '.repeat(nivel)}${partes.join(' ')}${texto ? ` «${texto.slice(0, 50)}»` : ''}`);
+      for (const hijo of nodo.children) recorrer(hijo, nivel + 1);
+    };
+    recorrer(raiz, 0);
+    if (lineas.length >= maxLineas) lineas.push('  …');
+    return lineas;
+  }
+
+  async function sondear() {
+    const lineas = ['[X AutoTranslate SONDA] Diagnóstico de la página. No cambia nada: solo mira y hace una petición por ruta.'];
+    lineas.push(`ruta: ${location.pathname}`);
+    lineas.push(`idioma de la interfaz: ${idiomaDestino()} · cookie lang: ${cookie('lang') ? 'sí' : 'no'} · <html lang>: ${document.documentElement.lang || '(vacío)'}`);
+    lineas.push(`sesión: ${cookie('ct0') ? 'sí' : 'no'} (cookie ct0)`);
+    const bloques = [...document.querySelectorAll('article [data-testid="tweetText"]')];
+    lineas.push(`bloques de texto en la página: ${bloques.length} · artículos: ${document.querySelectorAll('article').length}`);
+    const candidatos = [];
+    let descartadosDescritos = 0;
+    bloques.forEach((nodo, i) => {
+      const idioma = nodo.getAttribute('lang') ?? '';
+      let motivo = '';
+      if (traducidoPorX(nodo)) motivo = 'ya traducido por X';
+      else if (idioma.split('-')[0].toLowerCase() === idiomaDestino()) motivo = 'en el idioma de la interfaz';
+      else if (SIN_IDIOMA.has(idioma)) motivo = 'sin idioma';
+      else if (!idDe(nodo)) motivo = 'sin enlace permanente';
+      if (!motivo) candidatos.push(nodo);
+      else if (descartadosDescritos < 4) {
+        descartadosDescritos += 1;
+        lineas.push(`bloque ${i + 1} · idioma «${idioma || '—'}» · no se pediría: ${motivo}`);
+      }
+    });
+    lineas.push(`candidatos para pedir: ${candidatos.length}`);
+    candidatos.slice(0, 3).forEach((nodo, i) => {
+      lineas.push(`candidato ${i + 1} · idioma «${nodo.getAttribute('lang') || '—'}» · identificador ${idDe(nodo) || '(ninguno)'}${cajaDeCitaDe(nodo) ? ' · dentro de una caja de cita' : ''}`);
+    });
+    if (candidatos[0]) {
+      lineas.push('estructura del artículo del primer candidato:');
+      lineas.push(...esquema(candidatos[0].closest('article')).map((linea) => `    ${linea}`));
+    }
+    const deX = bloques.find((nodo) => traducidoPorX(nodo));
+    if (deX) {
+      lineas.push('estructura de un artículo que X ya tradujo:');
+      lineas.push(...esquema(deX.closest('article'), 35).map((linea) => `    ${linea}`));
+    }
+    if (!candidatos[0]) {
+      lineas.push('No hay ningún bloque que pedir. Abre un hilo con respuestas en otro idioma.');
+    } else if (!cookie('ct0')) {
+      lineas.push('No hay sesión (falta la cookie ct0): no se puede pedir nada.');
+    } else {
+      const id = idDe(candidatos[0]);
+      for (const ruta of ['grok', 'grok-api', 'clasico']) {
+        try {
+          const r = await abrirRuta(id, ruta);
+          const cabeceras = Object.entries(r.cabeceras).filter(([, valor]) => valor).map(([nombre, valor]) => `${nombre}=${valor}`).join(' · ');
+          lineas.push(`${ruta}: ${r.estado} en ${r.ms} ms${cabeceras ? ` · ${cabeceras}` : ''}`);
+          lineas.push(`  cuerpo: ${r.cuerpo.slice(0, 300).replace(/\s+/g, ' ')}`);
+        } catch (error) {
+          lineas.push(`${ruta}: fallo (${error.message})`);
+        }
+      }
+    }
+    console.info(lineas.join('\n'));
+  }
+
+  if (MODO_SONDA) setTimeout(sondear, RITMO.DIAGNOSTICO_MS);
 
   // X redibuja sin parar: cada nodo nuevo marca su artículo para el próximo examen.
   new MutationObserver((mutaciones) => {

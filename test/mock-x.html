@@ -3,6 +3,8 @@
 <head>
   <meta charset="utf-8">
   <title>X simulado — bancada de X AutoTranslate</title>
+  <!-- Igual que el manifiesto: los estilos de la extensión van aparte. -->
+  <link rel="stylesheet" href="../content.css">
   <style>
     html, body { margin: 0; }
     main { display: block; }
@@ -15,6 +17,17 @@
       display: flex;
       flex-direction: column;
       justify-content: space-between;
+    }
+    /* Enlace permanente de la publicación, como el de X: un <time> dentro de un enlace. */
+    .xat-cab { font-size: 12px; line-height: 16px; }
+    .xat-cab a { color: inherit; }
+    /* La barra que X pone delante de un post que ya tradujo. */
+    .xat-barra-x {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      line-height: 16px;
     }
     /* Hilo con cita: dos bloques en el mismo artículo de 200 px. */
     .xat-hilo { padding: 4px; gap: 4px; }

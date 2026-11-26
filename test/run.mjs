@@ -3,22 +3,57 @@
 //
 // Abre cada escenario de test/driver.js en un Chromium sin cabeza y comprueba su
 // veredicto. Dirige el navegador por el canal de depuración (--remote-debugging-pipe,
-// sin puertos abiertos) y con un perfil temporal que se borra al salir: nunca toca el
+// sin puertos de depuración) y con un perfil temporal que se borra al salir: nunca toca el
 // perfil del usuario.
+//
+// La página de pruebas se sirve por HTTP en 127.0.0.1, con puerto aleatorio y solo mientras
+// duran las pruebas, porque las cookies (la sesión simulada de X) no existen sobre file://.
+// El servidor solo entrega ficheros .html, .js y .css de este proyecto.
 //
 // Uso: node test/run.mjs [escenario...]
 // El binario se puede cambiar con la variable XAT_CHROME.
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { dirname, extname, join, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const BINARIO = process.env.XAT_CHROME || '/usr/lib/chromium/chromium';
 const LIMITE_MS = 40_000;
 const ARRANQUE_MS = 15_000;
-const pagina = pathToFileURL(join(dirname(fileURLToPath(import.meta.url)), 'mock-x.html')).href;
 const pedidos = process.argv.slice(2);
+
+const raiz = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const tipos = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+};
+const servidor = createServer(async (peticion, respuesta) => {
+  const rechazar = (codigo) => { respuesta.writeHead(codigo).end(); };
+  if (peticion.method !== 'GET') return rechazar(405);
+  let ruta;
+  try {
+    ruta = decodeURIComponent(new URL(peticion.url, 'http://127.0.0.1').pathname);
+  } catch {
+    return rechazar(400);
+  }
+  const fichero = resolve(raiz, `.${ruta}`);
+  const tipo = tipos[extname(fichero)];
+  if (!tipo || !fichero.startsWith(raiz + sep) || ruta.split('/').some((parte) => parte.startsWith('.'))) {
+    return rechazar(404);
+  }
+  try {
+    const contenido = await readFile(fichero);
+    respuesta.writeHead(200, { 'content-type': tipo, 'cache-control': 'no-store' }).end(contenido);
+  } catch {
+    rechazar(404);
+  }
+});
+await new Promise((resolver) => servidor.listen(0, '127.0.0.1', resolver));
+const pagina = `http://127.0.0.1:${servidor.address().port}/test/mock-x.html`;
 
 const perfil = mkdtempSync(join(tmpdir(), 'xat-perfil-'));
 const chrome = spawn(BINARIO, [
@@ -55,7 +90,7 @@ chrome.stdio[4].on('data', (trozo) => {
     if (mensaje.id !== undefined) {
       contestaciones.get(mensaje.id)?.(mensaje);
       contestaciones.delete(mensaje.id);
-    } else if (mensaje.method === 'Runtime.consoleAPICalled' && mensaje.params.type === 'warning') {
+    } else if (mensaje.method === 'Runtime.consoleAPICalled' && ['warning', 'info'].includes(mensaje.params.type)) {
       avisos.push(mensaje.params.args.map((a) => a.value ?? a.description ?? '').join(' '));
     } else if (mensaje.method === 'Runtime.exceptionThrown') {
       const { exception, text } = mensaje.params.exceptionDetails;
@@ -107,8 +142,12 @@ async function ejecutarEscenario(nombre, sesion) {
   // Una página que no está en primer plano tiene los tiempos ralentizados: su veredicto no vale.
   const fallos = [...(resultado?.fallos ?? [`sin veredicto tras ${LIMITE_MS} ms`]), ...excepciones.map((e) => `excepción: ${e}`)];
   if (visibilidad !== 'visible') fallos.push(`la página de pruebas no está en primer plano («${visibilidad}»): los tiempos no son fiables`);
-  if (resultado?.avisoEsperado && !avisos.some((aviso) => aviso.includes(resultado.avisoEsperado))) {
-    fallos.push(`no apareció en consola el aviso con «${resultado.avisoEsperado}»`);
+  for (const fragmento of [resultado?.avisoEsperado, ...(resultado?.avisosEsperados ?? [])].filter(Boolean)) {
+    if (!avisos.some((aviso) => aviso.includes(fragmento))) fallos.push(`no apareció en consola el aviso con «${fragmento}»`);
+  }
+  if (resultado?.unSoloAviso) {
+    const cuantos = avisos.filter((aviso) => aviso.trimStart().startsWith(resultado.unSoloAviso)).length;
+    if (cuantos !== 1) fallos.push(`debe haber exactamente un mensaje que empiece por «${resultado.unSoloAviso}» y hay ${cuantos}`);
   }
   return { nombre, ok: fallos.length === 0, fallos, ms: Date.now() - inicio };
 }
@@ -154,5 +193,6 @@ try {
   chrome.kill();
   await Promise.race([salido, new Promise((resolver) => setTimeout(resolver, 5_000))]);
   rmSync(perfil, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  servidor.close();
 }
 process.exit(codigoDeSalida);
