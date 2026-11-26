@@ -1,6 +1,6 @@
 # CLAUDE.md — X AutoTranslate
 
-Extensión de Chrome (Manifest V3) que traduce al español por ti en X lo que entra en pantalla y X no traduce sola (al idioma de la interfaz de X; la extensión está hecha para X en español). Sin permisos, sin dependencias, sin build. Antes de tocar nada, lee `docs/HANDOFF.md` (estado, cómo probarla, lecciones) y el diseño de la v2 (`docs/superpowers/specs/2026-11-26-x-autotranslate-v2-design.md`).
+Extensión de Chrome (Manifest V3) que traduce al español por ti en X lo que entra en pantalla y X no traduce sola: complementa a la traducción nativa de X, que en un hilo se queda en el post principal (traduce al idioma de la interfaz de X; la extensión está hecha para X en español). Sin permisos, sin dependencias, sin build. Antes de tocar nada, lee `docs/HANDOFF.md` (estado, cómo probarla, lecciones) y el diseño de la v2 (`docs/superpowers/specs/2026-11-26-x-autotranslate-v2-design.md`).
 
 ## Dónde está cada cosa
 
@@ -39,3 +39,5 @@ Necesita Node y Chromium en `/usr/lib/chromium/chromium` (o `XAT_CHROME`). No ab
 - Chromium sin cabeza deja la página como oculta unos 2,5 s después de arrancar: la bancada lo evita con `Emulation.setFocusEmulationEnabled` y los flags `--disable-background-*`.
 - En el protocolo de depuración, el nivel de `console.warn` es `warning`.
 - Una sonda de una sola medición pierde datos si imprime el cuerpo «limpio»: que escriba lo que ve tal cual.
+- Antes de commitear documentación, mirar sus encabezados (`grep -n '^## '`) y el diff: en `c54ef43` se borró sin querer el de «Instalación» del README y se publicó así.
+- `gh release view --json` no admite `isLatest`; para saber cuál es la última, `gh release list`. Y `git rev-parse --short` solo admite una revisión: para ver si `HEAD` y `origin/main` coinciden, `git status -sb` (tras `git fetch`) o dos llamadas.
