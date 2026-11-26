@@ -32,7 +32,15 @@
   function alClic(pub) {
     clics.push({ id: pub.id, t: Math.round(performance.now() - t0) });
     if (pub.falla) return;
-    setTimeout(() => traducir(pub), pub.retrasoMs);
+    setTimeout(() => (pub.redibuja ? pub.redibuja() : traducir(pub)), pub.retrasoMs);
+  }
+
+  function botonDeTexto(texto) {
+    const boton = document.createElement('button');
+    boton.type = 'button';
+    boton.setAttribute('aria-label', texto);
+    boton.textContent = texto;
+    return boton;
   }
 
   function botonDeTraducir(variante, alPulsar) {
@@ -46,6 +54,51 @@
     boton.append(texto);
     boton.addEventListener('click', alPulsar);
     return boton;
+  }
+
+  // Hilo cuyo post principal cita otra publicación. Cada uno lleva su botón de traducir.
+  // Traducir el principal redibuja el contenido del artículo: el <article> es el mismo
+  // elemento, pero todos sus hijos son nuevos.
+  function crearHilo({ id, cita, retrasoMs = 50 }) {
+    const principal = { id, original: `Original ${id}`, retrasoMs, falla: false, traducida: false };
+    const citada = { id: cita, original: `Original ${cita}`, retrasoMs, falla: false, traducida: false };
+    const articulo = document.createElement('article');
+    articulo.className = 'xat-pub xat-hilo';
+    const bloque = (pub) => {
+      const texto = document.createElement('div');
+      texto.setAttribute('data-testid', 'tweetText');
+      texto.lang = pub.traducida ? 'es' : 'en';
+      texto.textContent = pub.traducida ? `ES: ${pub.original}` : pub.original;
+      const hueco = document.createElement('div');
+      hueco.className = 'xat-control';
+      pub.texto = texto;
+      pub.hueco = hueco;
+      pub.control = null;
+      const caja = document.createElement('div');
+      caja.className = 'xat-bloque';
+      caja.append(texto, hueco);
+      if (pub.traducida) ponerControl(pub, botonDeTexto('Mostrar original'));
+      else ponerControl(pub, botonDeTraducir('texto', () => alClic(pub)));
+      return caja;
+    };
+    const montar = () => {
+      const marco = document.createElement('div');
+      marco.setAttribute('role', 'link');
+      marco.className = 'xat-cita';
+      marco.append(bloque(citada));
+      articulo.replaceChildren(bloque(principal), marco);
+    };
+    principal.redibuja = () => {
+      principal.traducida = true;
+      montar();
+    };
+    montar();
+    for (const pub of [principal, citada]) {
+      pub.articulo = articulo;
+      publicaciones.set(pub.id, pub);
+    }
+    document.querySelector('main').append(articulo);
+    return articulo;
   }
 
   function ponerControl(pub, boton) {
@@ -90,6 +143,7 @@
     avanzar,
     memo: {},
     crearPublicacion,
+    crearHilo,
     texto: (id) => publicaciones.get(id)?.texto.textContent ?? null,
     irA(id) {
       publicaciones.get(id).articulo.scrollIntoView({ block: 'center' });
@@ -190,6 +244,118 @@
           if (id !== 'r1') fallos.push(`hubo un clic fuera de un <article>: ${id}`);
         }
         if (!c.texto('r1')?.startsWith('ES: ')) fallos.push(`r1 no está traducida («${c.texto('r1')}»)`);
+        return fallos;
+      },
+    },
+
+    // Con X lento no se acumulan peticiones: el siguiente clic espera la respuesta (1,5 s como mucho).
+    lento: {
+      async ejecutar(c) {
+        for (let i = 1; i <= 3; i++) c.crearPublicacion({ id: `r${i}`, retrasoMs: 2500 });
+        await c.avanzar(7000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        for (const id of ['r1', 'r2', 'r3']) {
+          const n = c.clics.filter(({ id: x }) => x === id).length;
+          if (n !== 1) fallos.push(`${id} recibió ${n} clics y debería ser uno`);
+          if (!c.texto(id)?.startsWith('ES: ')) fallos.push(`${id} no está traducida («${c.texto(id)}»)`);
+        }
+        const [primero, segundo] = c.clics.map(({ t }) => t);
+        if (segundo - primero < 1480) fallos.push(`el 2.º clic llegó ${segundo - primero} ms después del 1.º (mínimo 1480)`);
+        return fallos;
+      },
+    },
+
+    // Una publicación a la que X no responde se reintenta una vez y después se deja en paz.
+    fallo: {
+      ajustes: { FALLO_MS: 1500, REINTENTO_MS: 2000, PAUSA_MS: 1000 },
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'r1', falla: true });
+        c.crearPublicacion({ id: 'r2' });
+        c.crearPublicacion({ id: 'r3' });
+        await c.avanzar(9000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        const deR1 = c.clics.filter(({ id }) => id === 'r1');
+        if (deR1.length !== 2) fallos.push(`r1 recibió ${deR1.length} clics y debería recibir 2`);
+        else if (deR1[1].t - deR1[0].t < 1980) fallos.push(`el reintento de r1 llegó ${deR1[1].t - deR1[0].t} ms después del 1.º clic (mínimo 1980)`);
+        for (const id of ['r2', 'r3']) {
+          const n = c.clics.filter(({ id: x }) => x === id).length;
+          if (n !== 1) fallos.push(`${id} recibió ${n} clics y debería ser uno`);
+          if (!c.texto(id)?.startsWith('ES: ')) fallos.push(`${id} no está traducida («${c.texto(id)}»)`);
+        }
+        if (deR1.some(({ t }) => t > 6000)) fallos.push('r1 recibió algún clic en los últimos 3 s');
+        return fallos;
+      },
+    },
+
+    // Tras tres fallos seguidos la cola hace una pausa, y lo sano que llegue durante la pausa espera.
+    // Las tres que fallan son las únicas visibles al empezar; la sana entra en pantalla en mitad
+    // de la pausa (que va de ~4,97 s a ~5,97 s). Sin pausa se la pulsaría hacia el 5,7 s.
+    pausa: {
+      ajustes: { FALLO_MS: 1500, REINTENTO_MS: 6000, PAUSA_MS: 1000 },
+      async ejecutar(c) {
+        for (let i = 1; i <= 3; i++) c.crearPublicacion({ id: `r${i}`, falla: true });
+        c.crearPublicacion({ id: 'r4' });
+        await c.avanzar(5400);
+        c.irA('r4');
+        await c.avanzar(1200); // r4 ya está traducida
+        c.irA('r1');           // las tres que fallan vuelven a estar en pantalla para sus reintentos
+        await c.avanzar(6400);
+      },
+      comprobar(c) {
+        const fallos = [];
+        const clicsDe = (id) => c.clics.filter(({ id: x }) => x === id);
+        for (const id of ['r1', 'r2', 'r3']) {
+          if (clicsDe(id).length !== 2) fallos.push(`${id} recibió ${clicsDe(id).length} clics y debería recibir 2`);
+        }
+        if (clicsDe('r4').length !== 1) fallos.push(`r4 recibió ${clicsDe('r4').length} clics y debería ser uno`);
+        if (!c.texto('r4')?.startsWith('ES: ')) fallos.push(`r4 no está traducida («${c.texto('r4')}»)`);
+        const [deR4] = clicsDe('r4');
+        const [deR3] = clicsDe('r3');
+        if (deR4 && deR3 && deR4.t - deR3.t < 2480) {
+          fallos.push(`el clic de r4 llegó ${deR4.t - deR3.t} ms después del 1.º clic de r3 (mínimo 2480)`);
+        }
+        return fallos;
+      },
+    },
+
+    // Una publicación que falló y salió de pantalla antes de llegar su reintento se reintenta al volver.
+    vuelve: {
+      ajustes: { FALLO_MS: 1500, REINTENTO_MS: 2000 },
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'r1', falla: true });
+        for (let i = 2; i <= 6; i++) c.crearPublicacion({ id: `r${i}` });
+        await c.avanzar(2500);
+        c.irA('r6'); // r1 sale de pantalla; su reintento llegaría hacia el 3,97 s
+        await c.avanzar(2000);
+        c.irA('r1'); // y vuelve
+        await c.avanzar(2000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        const deR1 = c.clics.filter(({ id }) => id === 'r1');
+        if (deR1.length !== 2) fallos.push(`r1 recibió ${deR1.length} clics y debería recibir 2: falta el reintento al volver a pantalla`);
+        else if (deR1[1].t < 4500) fallos.push(`el 2.º clic de r1 llegó en ${deR1[1].t} ms, antes de volver a pantalla`);
+        return fallos;
+      },
+    },
+
+    // X redibuja el hilo al traducir su post principal: la cita, con botón nuevo, también se traduce.
+    redisado: {
+      async ejecutar(c) {
+        c.crearHilo({ id: 'h1', cita: 'q1' });
+        await c.avanzar(3000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        for (const id of ['h1', 'q1']) {
+          const n = c.clics.filter(({ id: x }) => x === id).length;
+          if (n !== 1) fallos.push(`${id} recibió ${n} clics y debería ser uno`);
+          if (!c.texto(id)?.startsWith('ES: ')) fallos.push(`${id} no está traducida («${c.texto(id)}»)`);
+        }
         return fallos;
       },
     },

@@ -18,21 +18,30 @@
 
   // Tiempos en ms. __XAT_AJUSTES__ solo lo fija la bancada de pruebas.
   const RITMO = Object.freeze({
-    PARADA_MS: 300,    // cuánto tiene que estar el botón en pantalla antes de contar
-    HUECO_MIN_MS: 300, // mínimo entre dos clics
-    REEXAMEN_MS: 150,  // pausa antes de volver a examinar los artículos con nodos nuevos
+    PARADA_MS: 300,      // cuánto tiene que estar el botón en pantalla antes de contar
+    HUECO_MIN_MS: 300,   // mínimo entre dos clics
+    ESPERA_MAX_MS: 1500, // hasta que X responde al último clic (o pasa este tiempo) no se pulsa el siguiente
+    FALLO_MS: 5000,      // si el botón sigue ahí tras este tiempo, el clic ha fallado
+    REINTENTO_MS: 10000, // espera antes de reintentar una publicación que falló
+    PAUSA_MS: 60000,     // pausa de la cola tras varios fallos seguidos
+    FALLOS_PARA_PAUSA: 3,
+    REEXAMEN_MS: 150,    // pausa antes de volver a examinar los artículos con nodos nuevos
     ...globalThis.__XAT_AJUSTES__,
   });
 
   // Estado de cada botón: 'visto' (observado, sin cumplir todavía la parada), 'enCola',
-  // 'pendiente' (pulsado, a la espera de X) o 'descartado' (ese elemento no se vuelve a tocar).
+  // 'pendiente' (pulsado, a la espera de X o de un reintento) o 'descartado' (ese elemento
+  // no se vuelve a tocar).
   const estado = new WeakMap();
   const observados = new Set();  // botones que sigue mirando el IntersectionObserver
   const paradas = new Map();     // botón → temporizador de la parada
-  const pendientes = new Map();  // botón → { t, intentos }
+  const pendientes = new Map();   // botón → momento del último clic, a la espera de X
+  const intentos = new WeakMap(); // botón → clics que ha recibido
   const sucios = new Set();      // <article> con nodos nuevos desde el último examen
   const cola = [];
   let ultimoClic = -Infinity;
+  let pausadoHasta = 0;          // la cola no pulsa nada hasta este momento
+  let fallosSeguidos = 0;
   let temporizador = 0;          // próxima llamada a bombeo(), si la hay
   let avisoEn = 0;               // momento en que dispararía ese temporizador
   let examenPendiente = false;
@@ -80,23 +89,53 @@
   }
 
   function pulsar(btn) {
-    const info = pendientes.get(btn) ?? { intentos: 0 };
-    info.intentos += 1;
-    info.t = performance.now();
-    pendientes.set(btn, info);
-    ultimoClic = info.t;
+    const ahora = performance.now();
+    intentos.set(btn, (intentos.get(btn) ?? 0) + 1);
+    pendientes.set(btn, ahora);
+    ultimoClic = ahora;
     estado.set(btn, 'pendiente');
     btn.click();
     programar(RITMO.HUECO_MIN_MS);
   }
 
   // Un pendiente cuyo botón ya no es de traducir ha salido bien (X lo ha sustituido).
+  // Si sigue ahí pasados FALLO_MS, el clic ha fallado.
   function resolverPendientes() {
-    for (const [btn] of pendientes) {
-      if (btn.isConnected && esBotonTraducir(btn)) continue;
-      pendientes.delete(btn);
-      soltar(btn);
+    const ahora = performance.now();
+    for (const [btn, clic] of pendientes) {
+      if (btn.isConnected && esBotonTraducir(btn)) {
+        if (ahora - clic < RITMO.FALLO_MS) continue;
+        pendientes.delete(btn);
+        fallo(btn);
+      } else {
+        pendientes.delete(btn);
+        fallosSeguidos = 0;
+        soltar(btn);
+      }
     }
+  }
+
+  // Al segundo fallo la publicación se deja en paz; al primero se reintenta una vez.
+  function fallo(btn) {
+    fallosSeguidos += 1;
+    if (fallosSeguidos >= RITMO.FALLOS_PARA_PAUSA) {
+      pausar(RITMO.PAUSA_MS);
+      fallosSeguidos = 0;
+    }
+    if (intentos.get(btn) >= 2) {
+      soltar(btn);
+      return;
+    }
+    setTimeout(() => {
+      if (estado.get(btn) !== 'pendiente' || !btn.isConnected || !esBotonTraducir(btn)) return;
+      // Si mientras tanto salió de pantalla, se reintenta cuando vuelva a entrar.
+      if (enPantalla(btn)) encolar(btn);
+      else estado.set(btn, 'visto');
+    }, RITMO.REINTENTO_MS);
+  }
+
+  function pausar(ms) {
+    pausadoHasta = Math.max(pausadoHasta, performance.now() + ms);
   }
 
   // Deja de mirarse: ese elemento no se vuelve a tocar.
@@ -110,7 +149,15 @@
 
   function bombeo() {
     resolverPendientes();
-    const falta = RITMO.HUECO_MIN_MS - (performance.now() - ultimoClic);
+    const ahora = performance.now();
+    if (ahora < pausadoHasta) {
+      programar(pausadoHasta - ahora);
+      return;
+    }
+    // Hasta que X responde al último clic (o pasa ESPERA_MAX_MS) no se pulsa el siguiente.
+    let bloqueo = 0;
+    for (const clic of pendientes.values()) bloqueo = Math.max(bloqueo, clic + RITMO.ESPERA_MAX_MS - ahora);
+    const falta = Math.max(bloqueo, RITMO.HUECO_MIN_MS - (ahora - ultimoClic));
     if (falta > 0) {
       programar(falta);
       return;
