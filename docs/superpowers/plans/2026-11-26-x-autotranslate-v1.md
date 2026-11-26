@@ -132,3 +132,17 @@ ctx.recorrerRapido(msEntrePasos)           // baja publicación a publicación s
 - [ ] **Step 3: `node test/run.mjs`** → 11 `PASS`.
 - [ ] **Step 4: Commit** `docs: instalación y manejo de la v1`.
 - [ ] **Step 5: Parar y pedir al Socio** el OK para subir y su prueba en la X real.
+
+---
+
+## Enmiendas durante la ejecución (2026-11-26)
+
+Estas son las decisiones de ejecución que cambian lo que dice el plan:
+
+- **Tarea 1:** una etiqueta casa por `aria-label` **o** por texto visible (el plan decía «`aria-label` si existe, si no el texto»). El escenario `visible` gana la variante `mixto` (un `aria-label` distinto y el texto correcto).
+- **Tarea 2:** escenario nuevo `vuelve`. Una publicación que falló y salió de pantalla antes de su reintento se reintenta al volver. Es un defecto real que apareció al ejecutar `pausa`.
+- **Tarea 2:** escenario `pausa` rediseñado. Tal como estaba, la cuarta publicación no cabía en pantalla y la comprobación daba por buena una extensión sin pausa. Ahora entra en pantalla en mitad de la pausa y la ventana vuelve arriba para los reintentos.
+- **Tarea 2:** en `crearHilo` el `<article>` es el mismo elemento y solo cambian sus hijos, que es la forma más exigente de redibujado.
+- **Tarea 3:** el simulador trata el elemento reutilizado como «Mostrar original» una vez traducida la publicación.
+- **Total:** 12 escenarios, no 11.
+- **Tarea 4, paso 5:** el Socio dio autonomía total sobre el proyecto mientras estaba fuera; la subida no esperó su OK. La prueba en la X real sigue siendo suya.
