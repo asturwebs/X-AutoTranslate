@@ -1,6 +1,6 @@
 # Diseño — X AutoTranslate v2: pedir la traducción a X
 
-**Estado:** revisado el 2026-11-26 por dos revisores de otros motores (MiMo v2.6-pro y DeepSeek flash) y corregido con sus hallazgos; el Socio ratificó las correcciones y los topes. Extiende y corrige el [diseño de la v1](2026-11-26-x-autotranslate-design.md): lo que aquí no cambia sigue valiendo. Lo que nadie ha probado todavía va marcado **por verificar** y es lo que comprueba la sonda, antes de construir el resto.
+**Estado:** revisado el 2026-11-26 por dos revisores de otros motores (MiMo v2.6-pro y DeepSeek flash) y corregido con sus hallazgos; el Socio ratificó las correcciones y los topes. Extiende y corrige el [diseño de la v1](2026-11-26-x-autotranslate-design.md): lo que aquí no cambia sigue valiendo. Lo que nadie había probado iba marcado **por verificar** y lo comprobó la sonda en la X real del Socio el 26-nov-2026: cada punto dice ya si está comprobado o qué falta, y el resultado está en «La sonda».
 
 ## Por qué cambia
 
@@ -57,16 +57,17 @@ Si X sí pone el enlace, se pulsa como en la v1.
 
 ## Cómo se pide a X
 
-1. **Servicio de Grok.** `POST /i/api/2/grok/translation.json` (mismo origen). Si responde 404, la misma ruta en `https://api.x.com`: es una llamada a otro origen desde la página de x.com, como la que hace el propio cliente de X; si el navegador o X la bloquean, cuenta como fallo y se pasa al punto 2. **Por verificar.**
+1. **Servicio de Grok.** `POST /i/api/2/grok/translation.json` (mismo origen). Si responde 404, la misma ruta en `https://api.x.com`: es una llamada a otro origen desde la página de x.com, como la que hace el propio cliente de X; si el navegador o X la bloquean, cuenta como fallo y se pasa al punto 2. **Comprobado en la X real (sonda del 26-nov-2026):** responde 200 con la traducción.
    - Cuerpo: `{"content_type":"POST","id":"<identificador>","dst_lang":"<idioma de la interfaz>"}`.
    - Cabeceras: `authorization: Bearer <clave pública>`, `x-csrf-token: <cookie ct0>`, `x-twitter-auth-type: OAuth2Session`, `x-twitter-active-user: yes`, `x-twitter-client-language: <idioma de la interfaz>`, `content-type: text/plain;charset=UTF-8`.
-   - **No** se envía `x-client-transaction-id`: la generan algoritmos internos de X y los dos userscripts de referencia no la llevan. **Por verificar** que X no la exija; si la exige, la sonda lo destapa.
-   - Respuesta: en trozos, uno por línea, `{"result":{"content_type":"POST","text":"…","entities":{…}}}`. Se concatenan los `text`. Una línea `{"error":{"code":…,"message":…}}` es un fallo.
+   - **No** se envía `x-client-transaction-id`: la generan algoritmos internos de X y los dos userscripts de referencia no la llevan. **Comprobado:** X no la exige; las tres rutas respondieron 200 sin ella.
+   - Respuesta: en trozos, un objeto JSON cada uno, `{"result":{"content_type":"POST","text":"…","entities":{…}}}`. Se concatenan los `text`. **La sonda no dejó ver si X separa los trozos con saltos de línea o con espacios** (los imprimió juntos), así que el lector acepta las dos cosas. Un objeto `{"error":{"code":…,"message":…}}`, o un 200 sin texto, es un fallo; el aviso enseña lo que contestó.
 2. **Servicio clásico.** `GET /i/api/1.1/strato/column/None/tweetId=<id>,destinationLanguage=Some(<idioma>),translationSource=Some(X),feature=None,timeout=None,onlyCached=None/translation/service/translateTweet`, con las mismas cabeceras de sesión y sin `content-type`.
-   - Respuesta: JSON `{"translation":"…","sourceLanguage":"en","destinationLanguage":"es","localizedSourceLanguage":"…"}`. Si el estado no es 200, `{"errors":[{"code":…,"message":"…"}]}`. **Por verificar.**
+   - Respuesta según la documentación: JSON `{"translation":"…","sourceLanguage":"en","destinationLanguage":"es","localizedSourceLanguage":"…"}`. Si el estado no es 200, `{"errors":[{"code":…,"message":"…"}]}`.
+   - **Comprobado en la X real (sonda del 26-nov-2026):** responde 200, pero con `{"translation":"","translationState":"NotCached","destinationLanguage":""}` para una publicación que Grok sí tradujo. Hoy solo parece servir traducciones que ya tuviera guardadas. Se mantiene como último recurso porque no puede devolver una traducción falsa: una traducción vacía cuenta como fallo.
    - Se prueba cuando el punto 1 falla por 404, 400, 401, 403, error de servidor, red, timeout o respuesta vacía. No cuando responde 429.
 
-Fuente de este contrato: la documentación pública de `dfrnoch/liquidX` (leída del paquete del cliente de X el 13-nov-2026) y de `rien7/twitter-extension-api`, y el código de `Noctyn/x-native-translator` y `llpgf/x-grok-visible-translate` (ambos MIT). **Ninguna de las rutas se ha probado con la sesión del Socio.**
+Fuente de este contrato: la documentación pública de `dfrnoch/liquidX` (leída del paquete del cliente de X el 13-nov-2026) y de `rien7/twitter-extension-api`, y el código de `Noctyn/x-native-translator` y `llpgf/x-grok-visible-translate` (ambos MIT). Las tres rutas se probaron con la sesión del Socio el 26-nov-2026 con la sonda; el resultado está en cada punto y en «La sonda».
 
 ## Techo y paro
 
@@ -74,16 +75,18 @@ Ratificados por el Socio el 26-nov-2026:
 
 - **Por página:** 60 publicaciones pedidas desde que se cargó la página. Al llegar no se pide ninguna más hasta que se recargue. Aviso una sola vez.
 - **Por hora y pestaña:** 300 publicaciones pedidas en los últimos 60 minutos. Al llegar se espera a que se libere la ventana. Aviso una sola vez.
-- **Pestaña oculta:** con la pestaña en segundo plano no se pide nada; al volver, sigue.
+- **Pestaña oculta:** con la pestaña en segundo plano no se pide nada; al volver, sigue. Solo cuenta la pestaña oculta (`document.hidden`): una ventana tapada por otra no se detecta.
 - **Rechazo de permiso:** si todas las rutas responden 401 o 403 para una publicación, no se pide nada más hasta recargar la página. Aviso con la causa probable.
 - Cada cuenta («pedida») empieza con la primera petición de una publicación, y los reintentos no cuentan doble.
+- **Cupo de X** (añadido tras la sonda, sin tocar los topes de arriba): X cuenta sus traducciones por ventanas y lo dice en las cabeceras `x-rate-limit-remaining` y `x-rate-limit-reset`: 100 peticiones por ventana en Grok y 187 en el clásico (la ventana parece de 15 minutos, a juzgar por la hora de reinicio que dio; es una deducción, no una medida). Cuando una respuesta deja 10 o menos, no se pide nada hasta el reinicio de la ventana, con un segundo de margen: es prudencia, porque ese contador puede que no sea solo de la extensión (otras pestañas, la propia X). Si las cabeceras no vienen, no se reserva nada y manda el tratamiento del 429. Aviso una sola vez.
+- **Disyuntor:** dos pausas seguidas por fallos sin ningún éxito entre ellas significan que X no traduce nada. No se pide más hasta recargar la página. Aviso con la causa.
 
 ## Decisiones
 
 1. **Unidad e identidad.** La unidad es cada bloque de texto de publicación (`[data-testid="tweetText"]`) dentro de un `<article>`. Una cita dentro de un post es otra unidad.
-   - *Caja de cita:* el ancestro con `role="link"` más cercano, dentro del artículo, sin contar el artículo.
-   - *Identificador de una cita:* el primer enlace `…/status/<números>` **dentro de su propia caja de cita** (normalmente el que envuelve la `time`). Si la caja no tiene ninguno, la cita no tiene identificador y no se pide. Nunca se usa el del post que la contiene.
-   - *Identificador de un post:* el enlace `…/status/<números>` con una `time` que no esté dentro de ninguna caja de cita; si no lo hay, el primer enlace de estado fuera de las cajas de cita. Si no lo hay, no se pide.
+   - *Caja de cita:* el ancestro más cercano, dentro del artículo, que no contiene al post. No hace falta que lleve `role="link"` (corregido en la revisión del código: la regla anterior dependía de ese atributo y, sin él, una cita heredaba el identificador del post).
+   - *Identificador de una cita:* el primer enlace `…/status/<números>` con una `time` **dentro de su propia caja de cita**. Si la caja no tiene ninguno, la cita no tiene identificador y no se pide. Nunca se usa el del post que la contiene.
+   - *Identificador de un post:* el enlace `…/status/<números>` con una `time` que no esté dentro de ninguna caja de cita. Si no lo hay, no se pide: no hay relevo al primer enlace de estado (corregido en la revisión del código, por la misma razón).
    - Si dos bloques del mismo artículo resuelven al mismo identificador, solo se trata el primero.
 2. **Idioma.** El de la publicación es el atributo `lang` de su bloque; si falta o es uno de los códigos de X para «sin idioma» (`und`, `zxx`, `qam`, `qct`, `qht`, `qme`, `qst`), no se toca. El de la interfaz es el idioma base de la cookie `lang` de X; si no existe, el de `<html lang>`; y si no, `es`.
 3. **Ya traducido por X.** Hay un control «Mostrar original» que no es nuestro, que no está dentro de un bloque de texto y que en el artículo viene después del bloque anterior y antes de este. Ese bloque no se toca.
@@ -97,6 +100,8 @@ Ratificados por el Socio el 26-nov-2026:
    - **404 u otro 4xx en todas las rutas:** esa publicación se deja en paz.
    - **Error de servidor, red, timeout, respuesta vacía o respuesta que no es una traducción:** un reintento a los 10 s; después se deja en paz.
    - **Tres intentos fallidos seguidos:** pausa de 60 s. Un intento cuenta como fallido cuando todas sus rutas fallan; los 429 también cuentan.
+   - **Tope de tiempo:** 20 s para todas las rutas de una publicación juntas, no para cada ruta.
+   - **Un solo intento a la vez por publicación, y la que sale de pantalla no se pierde:** si a una publicación le llega el turno estando fuera de pantalla, su tarea se suelta y vuelve a empezar cuando reaparece. Lo que está aparcado por el techo o por un paro se queda en la cola sin estorbar a los clics del camino de la v1.
 9. **Memoria.** Lo que X contesta se guarda por identificador mientras la pestaña viva, hasta 500 publicaciones; se expulsa la más antigua. Si X redibuja un post, se vuelve a poner sin pedirla otra vez.
 10. **Vuelta atrás.** Nuestro «Mostrar original» enseña el original y deja un «Mostrar traducción», que vuelve a pintar la que ya se tenía sin pedirla. Una publicación devuelta al original **no se vuelve a pedir ni a pintar** en esa página, aunque X la redibuje. Se recuerda por publicación, no por artículo: devolver el post al original no afecta a su cita.
 11. **Caja e invariante.** Nuestra caja es un hermano del bloque de texto y lleva `data-xat-id` con el identificador.
@@ -105,7 +110,10 @@ Ratificados por el Socio el 26-nov-2026:
     - La vista «original» le quita la marca al bloque y deja la caja en modo compacto.
 12. **Nodos reutilizados.** Si X reutiliza un bloque para otra publicación (el identificador cambia), se quita la marca y la caja y se trata la nueva.
 13. **Rótulo.** «Traducido del <idioma>», con el nombre del idioma del bloque en español (`Intl.DisplayNames`). Si el nombre empieza por «lengua» o «idioma», «Traducido de». Si no hay nombre, «Traducido».
-14. **Diagnóstico.** En consola: una línea `warn` por intento fallido (estado o tipo de fallo, rutas probadas, tiempo y 120 caracteres como mucho de la respuesta) y, a los 5 s, una línea `info` con el resumen de la página: bloques vistos · ya traducidos por X · en el idioma de la interfaz · sin idioma · sin enlace permanente · pedidos · traducidos · fallidos · en espera. Si falta la cookie `ct0`, un `warn`: no hay sesión y no se puede pedir nada.
+14. **Diagnóstico.** En consola: una línea `warn` por intento fallido (estado o tipo de fallo, rutas probadas, tiempo y 240 caracteres como mucho de la respuesta, también cuando X responde 200 sin traducción) y, a los 5 s, una línea `info` con el resumen de la página: versión cargada · bloques vistos · ya traducidos por X · en el idioma de la interfaz · sin idioma · sin enlace permanente · devueltos al original · traducidos · pedidos · fallidos · en espera · cupo que le queda a X en su ventana. Si falta la cookie `ct0`, un `warn`: no hay sesión y no se puede pedir nada. La versión es la del manifiesto: tras recargar la extensión se ve en consola qué código está cargado.
+15. **Estado por publicación** (corregido en la revisión del código). Que una publicación está pedida, fallida, devuelta al original, en cola o en vuelo se sabe por su identificador, no por el bloque que la pinta: X crea, redibuja y reutiliza bloques. Una publicación se pide una sola vez, la que falló se deja en paz aunque X redibuje su bloque, y la misma traducción se pinta en todos los bloques de esa publicación.
+16. **Marcas por artículo con caducidad.** «Este artículo tiene botón de X» y «de este artículo se volvió al original» recuerdan a qué publicación pertenecen y caducan cuando X recicla el artículo para otra.
+17. **La caja va con su bloque.** Si X cambia de sitio el bloque, la caja se coloca otra vez detrás de él; un bloque oculto sin su caja delante no puede existir. Lo que toca un artículo que lleva caja se examina en el acto, para que la traducción de una publicación no llegue a verse bajo otra.
 
 ## La sonda (Tarea 0, antes de construir el resto)
 
@@ -117,11 +125,22 @@ Modo de diagnóstico temporal de la misma extensión, para aprender el contrato 
 
 Con lo que salga se fijan las reglas 1, 3 y la sección «Cómo se pide a X» antes de escribir el resto.
 
-## Por verificar en la X real
+**Resultado (26-nov-2026, en la X real del Socio, hilo con respuestas en inglés):**
 
-1. Que alguna de las rutas responde con la sesión del Socio, y cuál; y si X exige `x-client-transaction-id`.
-2. Que el bloque de texto lleva `lang`, y dónde está el enlace permanente de una respuesta y de una cita.
-3. Que la barra de X traducido está delante del texto, como en la captura.
-4. Que la llamada a `api.x.com` pasa desde el navegador.
-5. El aspecto de la barra propia junto a la de X, en tema oscuro y claro.
-6. Qué ritmo y qué volumen tolera X antes de responder 429.
+- Sesión e idioma: cookie `ct0` presente, `lang=es`, `<html lang>=es`.
+- Grok desde x.com: 200 en 715 ms, con la traducción en trozos `{"result":{"content_type":"POST","text":"…"}}`. Grok en `api.x.com`: 200 en 217 ms, el mismo texto entero, y deja leer sus cabeceras de límite.
+- Clásica: 200 en 221 ms, sin traducción (`translationState: "NotCached"`).
+- Cupo: `x-rate-limit-limit=100` para Grok (el mismo contador en las dos rutas) y `187` para la clásica. Por la hora de reinicio que dieron, la ventana parece de 15 minutos (deducido, no medido). Cada petición bajó el contador de Grok en uno. Tras la petición de la sonda los contadores marcaban 97 de 100 y 183 de 187: antes de ella alguien había pedido 2 y 3 veces en esas ventanas. Puede ser una carga anterior de la propia sonda o la propia X; la sonda no permite saberlo.
+- Bloques de texto: 7 en 7 artículos; 4 ya traducidos por X (detectados por su barra) y 3 candidatos en inglés, cada uno con su identificador. El servicio clásico devolvió el mismo identificador para el primero: es el que X espera.
+- La sonda recortó la estructura de los artículos antes de llegar al bloque de texto y a su enlace, así que **no enseñó** dónde pone X el enlace de una cita. La regla de identidad es a prueba de fallo y no depende de ello.
+
+Con ese resultado la sonda ya no hace falta y se quitó del código.
+
+## Verificado en la X real y lo que falta
+
+1. **Verificado.** Las tres rutas responden con la sesión del Socio; X no exige `x-client-transaction-id`.
+2. **Verificado en parte.** El bloque de texto lleva `lang`, y una respuesta tiene su enlace permanente donde se buscaba. El enlace de una cita dentro de un post: sin datos; si no está donde se busca, la cita no se traduce (nunca se traduce mal).
+3. **Verificado.** La barra de X traducido está delante del texto.
+4. **Verificado.** La llamada a `api.x.com` pasa desde el navegador.
+5. **Falta:** el aspecto de la barra propia junto a la de X, en tema oscuro y claro.
+6. **Medido el límite** (100 y 187 por ventana de 15 minutos, debajo de los topes); **falta** ver en uso real cuánto consume la propia X de ese cupo.

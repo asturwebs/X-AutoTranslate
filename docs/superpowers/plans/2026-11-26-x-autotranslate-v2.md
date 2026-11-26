@@ -160,3 +160,11 @@ Estas son las decisiones de ejecución que cambian lo que dice el plan. El regis
 - **Recuentos reales**, no los 44 del plan: 31 al cerrar la Tarea 1, 40 al cerrar la Tarea 3, 41 con el resumen de la Tarea 4, y 40 cuando se vaya la sonda.
 - **Commits:** las Tareas 1, 2 y 3 van juntas en un solo commit porque el código se escribió de una vez.
 - **Tarea 4:** la sonda no se quita hasta que llegue el resultado de la X real, porque puede hacer falta corregirla.
+- **Revisión final del código** (otro motor, contexto fresco, con el `delta.md` de la adversaria): «lista para fusionar con arreglos». Dos críticos (lo que sale de pantalla en cola no se traduce nunca más; la misma publicación se pide repetidamente sin contar), siete importantes y trece menores. Pasada de arreglos en un commit aparte, cada arreglo con su prueba en rojo antes y en verde después; el registro está en `progress.md`.
+- **La sonda en la X real (26-nov, tarde):** las tres rutas responden 200 con la sesión del Socio y Grok devuelve la traducción; la clásica responde 200 sin traducción; cupo de 100 por ventana en Grok y 187 en el clásico. De ahí salen cuatro ajustes, cada uno con su escenario nuevo:
+  - `trozosJuntos`: la sonda no dejó ver si X separa los trozos de Grok con saltos de línea o con espacios, y el lector solo entendía los saltos. Ahora acepta las dos cosas. Sin este arreglo, con trozos separados por espacios la extensión no habría traducido nada en la X real.
+  - `reservaDeCupo`: cuando X dice que quedan 10 peticiones o menos en su ventana, no se pide nada hasta el reinicio. No toca los topes ratificados.
+  - `clasicoVacio`: un 200 sin traducción enseña en el aviso lo que respondió X, con un recorte de 240 caracteres (el de 120 cortaba justo antes del dato que importa).
+  - `versionEnConsola`: el resumen de página empieza por la versión cargada, la del manifiesto.
+- **Recuento final:** 67 escenarios (los 64 de la pasada de arreglos, menos la sonda, más estos cuatro).
+- **Error de ejecución cazado a tiempo:** un endurecimiento de prueba cayó en `mismaEnVuelo` en vez de en `reutilizarEnVuelo` y durante un rato la suite tuvo una prueba mal escrita sin que se ejecutara. Lo destapó releer el simulador antes de commitear; el escenario `reutilizarEnVuelo` caza ahora la rotura que faltaba.
