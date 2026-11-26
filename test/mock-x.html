@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>X simulado — bancada de X AutoTranslate</title>
+  <style>
+    html, body { margin: 0; }
+    main { display: block; }
+    /* Publicación de 200 px: el texto arriba y el control abajo. Tres caben en una ventana de 600 px. */
+    .xat-pub {
+      box-sizing: border-box;
+      height: 200px;
+      padding: 8px;
+      border-bottom: 1px solid #ccc;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .xat-flotante {
+      position: fixed;
+      top: 8px;
+      right: 8px;
+      z-index: 10;
+      padding: 8px;
+      border: 1px solid #999;
+      background: #fff;
+    }
+    .xat-tarjeta { top: 72px; }
+  </style>
+</head>
+<body>
+  <main></main>
+
+  <!-- El simulador va antes: fija los ajustes del escenario antes de que arranque la extensión. -->
+  <script src="driver.js"></script>
+  <script src="../content.js"></script>
+</body>
+</html>
