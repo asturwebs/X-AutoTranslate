@@ -107,4 +107,4 @@ Ideas tomadas de [`llpgf/x-grok-visible-translate`](https://github.com/llpgf/x-g
 
 ## Licencia
 
-Todavía no tiene. Hasta que la tenga, el código es de su autor y no se puede reutilizar.
+[MIT](LICENSE). Puedes usarla, cambiarla y compartirla, también dentro de tus propios proyectos. Lo único que pide es conservar el aviso de copyright y el de permiso. Se ofrece tal cual, sin garantía.

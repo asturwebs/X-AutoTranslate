@@ -6,7 +6,11 @@ Cada build que se cargue en Chrome lleva su número. Se ve en `chrome://extensio
 
 ## [Sin publicar]
 
-Nada. Lo que hay pendiente está en [docs/HANDOFF.md](docs/HANDOFF.md).
+### Añadido
+
+- Licencia MIT para el código (`LICENSE`). No cambia la extensión, así que no hace falta sacar una versión por esto.
+
+Lo que hay pendiente está en [docs/HANDOFF.md](docs/HANDOFF.md).
 
 ## [2.0.1] - 2026-11-26
 

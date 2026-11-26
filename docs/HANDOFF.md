@@ -4,13 +4,14 @@
 
 ## Estado
 
-🟢 **v2.0.1: la v2 funciona en la X real del Socio; esta versión corrige el tamaño y la letra del texto traducido. Falta que él confirme la 2.0.1.**
+🟢 **v2.0.1: la v2 funciona en la X real del Socio; esta versión corrige el tamaño y la letra del texto traducido, y él la confirmó en su X (26-nov, 23:5x). Repositorio con licencia MIT desde el 26-nov.**
 
 - La **v1.0.0** solo pulsaba el botón «Traducir publicación» de X. En la X real no sirve para las respuestas de un hilo, porque **X no pone ese botón en ellas**.
 - La **v2.0.0** añade un segundo camino: pedir la traducción al propio servicio de X y ponerla en el sitio del original. **Tiene que estar en `main` y subida al repo** (`asturwebs/X-AutoTranslate`, etiqueta `v2.0.0`). Si `main` no la tiene, la fusión del final de la sesión del 26-nov no llegó a hacerse: ver «Cómo continuar».
 - **Comprobado en la X real del Socio (sonda del 26-nov, tarde):** las tres rutas responden 200 con su sesión y Grok devuelve la traducción. Detalle en el diseño v2, sección «La sonda».
 - **Probada por el Socio en su X (26-nov, 22:2x–22:3x):** la 2.0.0 carga, pide y pone traducciones reales sin fallos (su consola a los 5 s: 18 bloques, pedidas 1, traducidas 1, fallidas 0, en espera 3, cupo de X 99 de 100) y al bajar por un hilo las respuestas se traducen: «Correcto, parece que funciona». Un fallo de aspecto: el texto traducido salía más pequeño y con otra letra que el de X, porque la caja heredaba la tipografía del padre del bloque y X la fija en el bloque. **Corregido en la 2.0.1**: el texto traducido toma la tipografía del bloque al que sustituye.
-- **Sin confirmar por él:** la 2.0.1 en su X (tamaño y letra del texto traducido; el aspecto de la barra propia junto a la de X, en oscuro y en claro). Pendiente su decisión sobre un gris clarito para el texto traducido: se le desaconsejó, porque baja el contraste de lo que se lee y la barra ya lo distingue.
+- **Confirmada por él la 2.0.1 en su X (26-nov, 23:5x):** «sí lo miré y ya se ve el texto». Lo que no dijo: el aspecto de la barra propia junto a la de X, en oscuro y en claro (no se da por confirmado). El gris clarito para el texto traducido quedó sin decidir; se le desaconsejó, porque baja el contraste de lo que se lee y la barra ya lo distingue.
+- **Hay usuarios terceros desde el 26-nov por la noche:** el dueño del proyecto la compartió fuera. Lo que se publique a partir de ahora lo usa gente que no la ha construido.
 
 ## Dónde está cada cosa
 
@@ -22,6 +23,7 @@
 | `docs/superpowers/specs/` | Diseño de la v1 y de la v2 (el de la v2 lleva el resultado de la sonda) |
 | `docs/superpowers/plans/` | Planes de la v1 y de la v2, con las enmiendas de la ejecución |
 | `CHANGELOG.md` | Qué cambia en cada versión |
+| `LICENSE` | Licencia MIT del código |
 | [Releases de GitHub](https://github.com/asturwebs/X-AutoTranslate/releases) | Cada versión publicada: un zip con `manifest.json`, `content.js` y `content.css`, listo para cargar en Chrome, y sus notas |
 | `CLAUDE.md` | Reglas para trabajar en el proyecto: dónde está cada cosa, cómo probar y lo que no se toca |
 | `~/Work/x-autotranslate-adversarial-v2/` | Revisión adversaria del diseño (congelado, briefs, informes, `delta.md`) copia del registro de ejecución del plan v2 (`registro-v2-progress.md`: decisiones tomadas y menores aplazados) y la lista de roturas del código (`mutar-v2.py`); su `README.md` indexa la carpeta |
@@ -59,6 +61,8 @@ Pasos que se le dieron al Socio el 26-nov por la noche: esos mismos.
 - **2026-11-26 22:3x–23:2x** — **el Socio prueba la 2.0.0 en su X:** funciona. Le molesta que el texto traducido salga más pequeño (la otra letra no); sugiere un gris clarito para diferenciarlo, sin decidir. **2.0.1** (rama `fix/2.0.1-tipografia`, en un worktree aparte para no mover la carpeta de Chrome hasta verificar; fusión por avance rápido): el texto traducido toma la tipografía del bloque de X. Escenario nuevo `tipografia`. BytIA le desaconseja el gris para el texto.
 - **2026-11-26 23:2x–23:3x** — **presencia en GitHub.** El Socio pregunta si el README está bien y si hay versiones para descargar. Había etiquetas pero ningún release. Publicadas las tres (1.0.0, 2.0.0 y 2.0.1 como última) con un zip hecho con `git archive` de cada etiqueta y notas en español; descripción del repo corregida (describía la v1) y temas añadidos; README con el enlace de descarga, la instalación desde el zip y fuera un consejo de la v1 que ya no valía.
 - **2026-11-26 23:3x–23:5x** — **dos correcciones del Socio a las primeras líneas del README.** Primero: no decían que traduce al español (commit `15c8652`; corregido también en la descripción del repo, las notas de las versiones y el registro de cambios). Después: que diga que **complementa a la traducción nativa de X**, porque las respuestas de un post no se traducen sin entrar en ellas; y que entre la configuración del idioma de X (texto sacado de Grok y comprobado por él). Hecho en `e1c43f8`: ese párrafo, arriba del todo; la sección «Instalación» con su encabezado (se había perdido en `c54ef43` y los pasos colgaban de «Estado»); antes de instalar, tres requisitos: X en español (la ruta de la ayuda oficial de X, la misma que comprobó el Socio), sesión iniciada y Chrome en el ordenador; en «Si no traduce», qué pasa si la interfaz de X no está en español. **La parte del móvil no entró**: es cierta según la ayuda de X, pero la extensión no se instala en la app del móvil. Las notas de la 2.0.1 y la 2.0.0 y la descripción del repo dicen lo mismo (preparado, comprobado y publicado en pasos separados).
+- **2026-11-26 23:5x** — **hay usuarios terceros** (el dueño del proyecto la compartió fuera) y **él confirma la 2.0.1 en su X.** Repaso del repo público en ese momento: sin claves, cookies, identificadores de publicaciones ni capturas en los ficheros; lo único personal es la autoría de los commits. Con gente usándola, la licencia dejó de poder esperar.
+- **2026-11-26 23:5x–00:0x** — **licencia MIT** (decisión del dueño del proyecto). `LICENSE` con la plantilla de GitHub, cotejada con el texto de SPDX; el titular es el nombre de autor de los commits. Cambiado donde decía que el código no se podía reutilizar: README, notas de las tres versiones y este fichero. Los zips publicados antes de la licencia no llevan el fichero dentro; los siguientes, sí.
 
 ## Cómo probar (la bancada)
 
@@ -72,12 +76,12 @@ Sin dependencias. Un Chromium sin cabeza con perfil temporal, por `--remote-debu
 
 ## Pendientes
 
-1. **Confirmación de la 2.0.1 por el Socio:** tamaño y letra del texto traducido, iguales a los de X; aspecto de la barra propia junto a la de X (tema oscuro y claro); el salto de alto de la celda al crecer. Cada arreglo, con su número de versión.
-2. **Licencia del repositorio.** Sin decidir; es del Socio.
-3. Publicar en la Chrome Web Store, si se quiere. Hoy se carga desempaquetada.
-4. Menores aplazados de las dos revisiones de código: la vuelta atrás con teclado, rendimiento sin medir, el manifiesto sin prueba automática (v1); una ventana tapada por otra no cuenta como oculta (solo `document.hidden`), `test/run.mjs` sin manejador de SIGINT/SIGTERM (v2); y usar `AbortSignal.timeout()` en vez de `AbortController` con `setTimeout` para el tope de tiempo de cada publicación, que es lo que pide la guía `js` de `modern-web-guidance` (comprobando también `TimeoutError`, no solo `AbortError`; hoy funciona igual con el temporizador manual). Y de la adversaria: coordinación entre pestañas, no hecha por decisión del Socio.
-5. La descripción del manifiesto (`description`, la que sale en `chrome://extensions`) no dice que traduce al español ni que complementa a la traducción de X. Texto propuesto para la próxima versión (114 caracteres; Chrome admite 132): «Complementa a la traducción de X: traduce al español, sin entrar en ellas, las respuestas que X deja sin traducir.». Cambiarla en la próxima versión, para no sacar una solo por eso.
-6. La ruta clásica de X, en la única medición real, no tradujo nada. Se queda como último recurso porque no puede devolver una traducción falsa; si en la prueba real no sirve para nada, se puede quitar y simplificar.
+1. Del lado del dueño del proyecto, cuando quiera: el aspecto de la barra propia junto a la de X (tema oscuro y claro) y el salto de alto de la celda al crecer, que no comentó al confirmar la 2.0.1; y una captura real para el README.
+2. Publicar en la Chrome Web Store, si se quiere. Hoy se carga desempaquetada.
+3. Menores aplazados de las dos revisiones de código: la vuelta atrás con teclado, rendimiento sin medir, el manifiesto sin prueba automática (v1); una ventana tapada por otra no cuenta como oculta (solo `document.hidden`), `test/run.mjs` sin manejador de SIGINT/SIGTERM (v2); y usar `AbortSignal.timeout()` en vez de `AbortController` con `setTimeout` para el tope de tiempo de cada publicación, que es lo que pide la guía `js` de `modern-web-guidance` (comprobando también `TimeoutError`, no solo `AbortError`; hoy funciona igual con el temporizador manual). Y de la adversaria: coordinación entre pestañas, no hecha por decisión del Socio.
+4. La descripción del manifiesto (`description`, la que sale en `chrome://extensions`) no dice que traduce al español ni que complementa a la traducción de X. Texto propuesto para la próxima versión (114 caracteres; Chrome admite 132): «Complementa a la traducción de X: traduce al español, sin entrar en ellas, las respuestas que X deja sin traducir.». Cambiarla en la próxima versión, para no sacar una solo por eso.
+5. La ruta clásica de X, en la única medición real, no tradujo nada. Se queda como último recurso porque no puede devolver una traducción falsa; si en la prueba real no sirve para nada, se puede quitar y simplificar.
+6. Los zips de las versiones publicadas antes de la licencia (1.0.0, 2.0.0 y 2.0.1) no llevan `LICENSE` dentro. La licencia vale igual (está en el repositorio y la cita cada nota de versión); si se quiere el fichero dentro de esos zips, hay que volver a subirlos. Decisión del dueño del proyecto.
 
 ## Cómo continuar
 
@@ -111,6 +115,7 @@ Sin dependencias. Un Chromium sin cabeza con perfil temporal, por `--remote-debu
 - **Tras editar documentación, mirar sus encabezados antes de commitear.** En `c54ef43` se borró sin querer el encabezado `## Instalación` del README: los pasos quedaron colgando de «Estado» y se publicó así, sin que nadie lo viera hasta el cambio siguiente. `grep -n '^## '` y el diff, leídos, lo cazan.
 - **Las primeras líneas de una presentación dicen lo esencial, y lo esencial incluye cómo encaja con lo que ya existe.** Dos correcciones del Socio el mismo día: que traduce al español, y que complementa a la traducción nativa de X.
 - **Un texto de configuración ajeno se comprueba antes de entrar en el README.** El de esta sesión (la ruta del idioma de X) venía de Grok; coincidía con la ayuda oficial de X y el Socio lo había comprobado en su X, así que entró. Su parte del móvil no: la extensión no se instala en la app del móvil.
+- **Un texto canónico se genera desde la fuente, no se teclea.** Al pasar a mano la licencia MIT se perdió un «and/or»; lo cazó cotejar el fichero con la plantilla de GitHub palabra a palabra (y la plantilla, con el texto de SPDX).
 
 ## Referencias
 

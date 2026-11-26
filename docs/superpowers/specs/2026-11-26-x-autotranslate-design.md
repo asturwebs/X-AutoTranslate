@@ -85,4 +85,4 @@ También evaluado y descartado: `amahteru/x-auto-translate` (MIT), extensión de
 
 ## Abierto
 
-- **Licencia del repositorio.** Hoy no tiene. Es decisión del autor.
+- **Licencia del repositorio.** Al escribir este diseño no tenía: era decisión del autor. Resuelto el 26-nov-2026 por la noche: **MIT** (`LICENSE` en la raíz).
