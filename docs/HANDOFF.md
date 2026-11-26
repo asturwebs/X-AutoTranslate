@@ -20,7 +20,9 @@
 | `test/run.mjs`, `test/driver.js`, `test/mock-x.html` | La bancada: simula a X y su servicio de traducción |
 | `docs/superpowers/specs/` | Diseño de la v1 y de la v2 (el de la v2 lleva el resultado de la sonda) |
 | `docs/superpowers/plans/` | Planes de la v1 y de la v2, con las enmiendas de la ejecución |
-| `~/Work/x-autotranslate-adversarial-v2/` | Revisión adversaria del diseño (congelado, briefs, informes, `delta.md`) copia del registro de ejecución del plan v2 (`registro-v2-progress.md`: decisiones tomadas y menores aplazados) y la lista de roturas del código (`mutar-v2.py`) |
+| `CHANGELOG.md` | Qué cambia en cada versión |
+| `CLAUDE.md` | Reglas para trabajar en el proyecto: dónde está cada cosa, cómo probar y lo que no se toca |
+| `~/Work/x-autotranslate-adversarial-v2/` | Revisión adversaria del diseño (congelado, briefs, informes, `delta.md`) copia del registro de ejecución del plan v2 (`registro-v2-progress.md`: decisiones tomadas y menores aplazados) y la lista de roturas del código (`mutar-v2.py`); su `README.md` indexa la carpeta |
 
 El worktree de desarrollo `~/Projects/X-AutoTranslate-dev` y la rama `feature/v2` ya no existen: se borraron al fusionar.
 

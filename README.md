@@ -2,6 +2,8 @@
 
 Extensión de Chrome que traduce por ti en X lo que va entrando en pantalla: las respuestas de un hilo, las citas y cualquier publicación que X no traduce sola.
 
+Los cambios de cada versión están en [CHANGELOG.md](CHANGELOG.md).
+
 ## Por qué
 
 X ofrece traducción automática para los posts (se activa por idioma), pero no llega a las respuestas de un hilo: aparecen en su idioma y **sin ningún enlace de traducir**. Solo se traducen al entrar en ellas. Leer un hilo obliga a entrar en cada respuesta. La extensión de la tienda que hacía eso tiene un tope de 50 traducciones al día en su versión gratuita.
@@ -86,7 +88,7 @@ XAT_CHROME=/ruta/a/chrome node test/run.mjs
 
 Abren un Chromium sin cabeza con un perfil temporal, dirigido por el canal de depuración, sobre una página que simula a X (`test/mock-x.html`), con un servicio de traducción de X falso. No abren ningún puerto de depuración y no tocan tu perfil de navegador. La página se sirve por HTTP en `127.0.0.1`, con puerto aleatorio y solo mientras duran las pruebas, porque las cookies no existen sobre `file://`.
 
-El diseño está en `docs/superpowers/specs/` y el estado del proyecto en `docs/HANDOFF.md`.
+El diseño está en `docs/superpowers/specs/` y el estado del proyecto en `docs/HANDOFF.md`. Cada escenario se comprueba rompiendo el código a propósito: una prueba que no cae en rojo cuando se rompe lo que vigila no vale. Para trabajar en el proyecto, las reglas están en `CLAUDE.md`.
 
 ## Crédito
 
