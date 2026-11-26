@@ -75,7 +75,7 @@ ctx.recorrerRapido(msEntrePasos)           // baja publicación a publicación s
 
 ---
 
-### Tarea 1: Bancada, detección y clic de lo visible
+### Task 1: Bancada, detección y clic de lo visible
 
 **Files:**
 - Create: `manifest.json`, `content.js`, `test/run.mjs`, `test/mock-x.html`, `test/driver.js`
@@ -92,7 +92,7 @@ ctx.recorrerRapido(msEntrePasos)           // baja publicación a publicación s
 - [ ] **Step 4: `node test/run.mjs`** → 3 `PASS`.
 - [ ] **Step 5: Commit** `feat: detecta y pulsa «Traducir publicación» en lo que entra en pantalla`.
 
-### Tarea 2: Ritmo, fallos y redibujados
+### Task 2: Ritmo, fallos y redibujados
 
 **Files:**
 - Modify: `content.js`, `test/driver.js`
@@ -107,7 +107,7 @@ ctx.recorrerRapido(msEntrePasos)           // baja publicación a publicación s
 - [ ] **Step 4: `node test/run.mjs`** → 7 `PASS`.
 - [ ] **Step 5: Commit** `feat: ritmo de uno en uno, reintento y pausa ante fallos`.
 
-### Tarea 3: Vuelta atrás, respeto y robustez
+### Task 3: Vuelta atrás, respeto y robustez
 
 **Files:**
 - Modify: `content.js`, `test/driver.js`
@@ -122,7 +122,7 @@ ctx.recorrerRapido(msEntrePasos)           // baja publicación a publicación s
 - [ ] **Step 4: `node test/run.mjs`** → 11 `PASS`.
 - [ ] **Step 5: Commit** `feat: respeta «Mostrar original» y diagnostica etiquetas desconocidas`.
 
-### Tarea 4: Entrega
+### Task 4: Entrega
 
 **Files:**
 - Modify: `README.md`, `docs/HANDOFF.md`
