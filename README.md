@@ -47,7 +47,7 @@ Si crees que has encontrado un agujero, dínoslo en privado en vez de en un issu
 
 ## Estado
 
-**v2.0.1.** Probada contra una página que simula a X, con un servicio de traducción falso; su forma de pedir la traducción, comprobada con una sesión real de X el 26-nov-2026; y la 2.0.0, probada entera en la X real: las respuestas de un hilo se traducen al bajar. La 2.0.1 corrige el tamaño y la letra del texto traducido, que salían más pequeños que los de X. Si no traduce, mira [Si no traduce](#si-no-traduce).
+**v2.0.2.** Probada contra una página que simula a X, con un servicio de traducción falso. Su forma de pedir la traducción se comprobó con una sesión real de X el 26-nov-2026, y la 2.0.0 y la 2.0.1 se usaron en la X real: las respuestas de un hilo se traducen al bajar. La 2.0.2 no cambia cómo traduce. Si no traduce, mira [Si no traduce](#si-no-traduce).
 
 ## Instalación
 
@@ -70,7 +70,7 @@ Para quitarla, «Quitar» en esa misma página. Para actualizarla, descomprime e
 1. Abre el hilo que no se traduce.
 2. Pulsa F12 y ve a **Console**. Hazlo antes de nada: el diagnóstico sale una sola vez, 5 s después de cargar la página. También vale en la ventana de la web app.
 3. Recarga la página.
-4. Busca la línea que empieza por `[X AutoTranslate] Página:`. Empieza con **la versión que tienes cargada** (por ejemplo `v2.0.1`): si no es la que esperabas, la extensión no llegó a recargarse. El resto cuenta lo que hay en la página y explica casi todos los casos:
+4. Busca la línea que empieza por `[X AutoTranslate] Página:`. Empieza con **la versión que tienes cargada** (por ejemplo `v2.0.2`): si no es la que esperabas, la extensión no llegó a recargarse. El resto cuenta lo que hay en la página y explica casi todos los casos:
    - `cupo de X en esta ventana`: cuántas peticiones le quedan a tu cuenta en la ventana en curso (unos 15 minutos). Baja y no sube hasta que pasa el rato.
    - `sin enlace permanente` sube y no se traduce nada: X cambió dónde pone el enlace de cada publicación. Abre un issue con esa línea.
    - `ya traducidas por X`: se quedan como están, X las tradujo.
@@ -99,9 +99,9 @@ node test/run.mjs hilo       # solo algunos
 XAT_CHROME=/ruta/a/chrome node test/run.mjs
 ```
 
-Abren un Chromium sin cabeza con un perfil temporal, dirigido por el canal de depuración, sobre una página que simula a X (`test/mock-x.html`), con un servicio de traducción de X falso. No abren ningún puerto de depuración y no tocan tu perfil de navegador. La página se sirve por HTTP en `127.0.0.1`, con puerto aleatorio y solo mientras duran las pruebas, porque las cookies no existen sobre `file://`.
+Abren un Chromium sin cabeza con un perfil temporal que se borra al salir, dirigido por el canal de depuración, sobre una página que simula a X (`test/mock-x.html`), con un servicio de traducción de X falso. No abren ningún puerto de depuración y no tocan tu perfil de navegador. La página se sirve por HTTP en `127.0.0.1`, con puerto aleatorio y solo mientras duran las pruebas, porque las cookies no existen sobre `file://`. Antes de los escenarios comprueban `manifest.json`: sin permisos, corriendo solo en x.com y twitter.com, y con la misma versión que la última del registro de cambios.
 
-El diseño está en `docs/superpowers/specs/` y el estado del proyecto en `docs/HANDOFF.md`. Cada escenario se comprueba rompiendo el código a propósito: una prueba que no cae en rojo cuando se rompe lo que vigila no vale. Para trabajar en el proyecto, las reglas están en `CLAUDE.md`.
+El diseño está en `docs/`: [el de la v1](docs/diseno-v1.md) y [el de la v2](docs/diseno-v2.md). Cada escenario se comprueba rompiendo el código a propósito: una prueba que no cae en rojo cuando se rompe lo que vigila no vale. Para trabajar en el proyecto, las reglas están en [AGENTS.md](AGENTS.md).
 
 ## Crédito
 

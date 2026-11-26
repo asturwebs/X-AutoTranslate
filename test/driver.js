@@ -236,7 +236,7 @@
     originalVisible: (id) => (publicaciones.get(id)?.texto.getClientRects().length ?? 0) > 0,
     enlaceDe: (id) => ctx.cajaDe(id)?.querySelector('.xat-enlace') ?? null,
     nodoDe: (id) => publicaciones.get(id)?.texto ?? null,
-    // El Socio pulsa «Mostrar original».
+    // Quien navega pulsa «Mostrar original».
     pulsarOriginal(id) {
       publicaciones.get(id).control.click();
     },
@@ -535,7 +535,7 @@
       },
     },
 
-    // Si el Socio pulsa «Mostrar original», esa publicación no se vuelve a traducir.
+    // Si quien navega pulsa «Mostrar original», esa publicación no se vuelve a traducir.
     original: {
       async ejecutar(c) {
         c.crearPublicacion({ id: 'r1' });

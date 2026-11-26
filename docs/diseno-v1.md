@@ -28,7 +28,7 @@ Pulsar el botón de X reutiliza su propia traducción: no hay claves, ni servici
 
 - **Un clic en otro sitio.** Un clic equivocado en X puede ser un «me gusta» o un repost público. Solo se pulsa algo cuya etiqueta esté en la lista exacta.
 - **Una ráfaga de peticiones.** X pone límite de peticiones a su traducción y responde 429 (varios proyectos de 2026 llevan pausa para eso). Un hilo largo traducido de golpe puede acabar en error o en una marca de automatismo sobre la cuenta. De ahí la cola y el ritmo.
-- **Quedarse sin el original.** Siempre tiene que quedar la vuelta atrás de X, y si el Socio pulsa «Mostrar original», esa publicación no se vuelve a traducir.
+- **Quedarse sin el original.** Siempre tiene que quedar la vuelta atrás de X, y si quien navega pulsa «Mostrar original», esa publicación no se vuelve a traducir.
 - **Consumir CPU al hacer scroll.** X redibuja el feed sin parar; el observador tiene que ser barato.
 
 ## Restricciones
@@ -61,7 +61,7 @@ Se elige A porque cubre la necesidad con el mínimo código y sin terceros. De D
 
 También evaluado y descartado: `amahteru/x-auto-translate` (MIT), extensión de Chrome que traduce por su cuenta, sin español entre sus idiomas y sin control de ritmo; y `cpetschnig/translate-twitter`, aplicación de servidor (Ruby on Rails, 2010-2013, archivada) que copia los tweets de una cuenta, los traduce y los publica desde otra cuenta.
 
-## Decisiones (propuestas por BytIA, corregibles)
+## Decisiones
 
 1. **Mecanismo:** clic programático en el botón nativo. Sin llamadas a la API. Tres proyectos de 2026 lo hacen con `element.click()` y les funciona.
 2. **Alcance:** todo lo que esté dentro de un `<article>` (timeline, hilos y citas). Fuera: diálogos (el compositor) y tarjetas flotantes.
@@ -69,14 +69,14 @@ También evaluado y descartado: `amahteru/x-auto-translate` (MIT), extensión de
 4. **Ritmo:** cola global, de arriba a abajo, de uno en uno. Después de cada clic se sortea un hueco de 600 a 1500 ms. Además no se pulsa el siguiente hasta que X responde al anterior (el botón deja de ser de traducir) o pasan 1,5 s. El hueco no depende de la respuesta de X: si X quita el control de inmediato, no hay cadencia fija ni se acumulan peticiones.
 5. **Fallo:** si un botón sigue ahí 5 s después del clic, se reintenta una vez a los 10 s; si sigue, se deja en paz esa publicación. Tres fallos seguidos pausan la cola 60 s. El plazo de fallo lleva su propio temporizador: se cumple aunque la página esté quieta.
 6. **Redibujados:** X reutiliza y recrea nodos. Un botón nuevo se pulsa aunque la publicación ya estuviera traducida antes (X vuelve a servir la traducción). Un mismo botón nunca se pulsa dos veces sin haber fallado.
-7. **Vuelta atrás:** si el Socio pulsa «Mostrar original», esa publicación no se vuelve a traducir mientras la página no cambie.
+7. **Vuelta atrás:** si quien navega pulsa «Mostrar original», esa publicación no se vuelve a traducir mientras la página no cambie.
 8. **Sin estado:** nada de `storage`, ni servicio en segundo plano, ni caché.
 9. **Diagnóstico:** si a los 5 s hay botones que parecen de traducir y no están en la lista, la extensión no los toca y avisa una vez en la consola con las etiquetas vistas, para añadirlas.
 10. **Tiempos ajustables para las pruebas:** todos los tiempos viven en un solo objeto que la bancada de pruebas acorta. En X real nadie los toca.
 
 ## Lo que queda por verificar en la página real (primer día de uso)
 
-1. Etiqueta exacta del botón en la interfaz en español de España del Socio.
+1. Etiqueta exacta del botón en la interfaz de X en español de España.
 2. Que `button.click()` dispara la traducción en su cuenta.
 3. Qué muestra X cuando una traducción falla o responde 429, y qué ritmo tolera.
 4. Que la extensión carga y funciona en la ventana `--app` de la web app.

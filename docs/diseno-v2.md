@@ -1,10 +1,10 @@
 # Diseño — X AutoTranslate v2: pedir la traducción a X
 
-**Estado:** revisado el 2026-11-26 por dos revisores de otros motores (MiMo v2.6-pro y DeepSeek flash) y corregido con sus hallazgos; el Socio ratificó las correcciones y los topes. Extiende y corrige el [diseño de la v1](2026-11-26-x-autotranslate-design.md): lo que aquí no cambia sigue valiendo. Lo que nadie había probado iba marcado **por verificar** y lo comprobó la sonda en la X real del Socio el 26-nov-2026: cada punto dice ya si está comprobado o qué falta, y el resultado está en «La sonda».
+**Estado:** revisado el 2026-11-26 por dos revisores de otros motores (MiMo v2.6-pro y DeepSeek flash) y corregido con sus hallazgos; el mantenedor ratificó las correcciones y los topes. Extiende y corrige el [diseño de la v1](diseno-v1.md): lo que aquí no cambia sigue valiendo. Lo que nadie había probado iba marcado **por verificar** y lo comprobó la sonda en la X real el 26-nov-2026: cada punto dice ya si está comprobado o qué falta, y el resultado está en «La sonda».
 
 ## Por qué cambia
 
-La v1 daba por hecho que X pone un enlace «Traducir publicación» bajo cada respuesta sin traducir. No es así. En la X real del Socio (captura del 26-nov, 17:30):
+La v1 daba por hecho que X pone un enlace «Traducir publicación» bajo cada respuesta sin traducir. No es así. En la X real (26-nov-2026, 17:30):
 
 - el post principal de un hilo lo traduce X solo («Traducido del inglés · Mostrar original»);
 - las respuestas de debajo aparecen en su idioma **y sin ningún enlace**;
@@ -27,7 +27,7 @@ Si X sí pone el enlace, se pulsa como en la v1.
 - Respuestas, citas y posts sin traducir se ven en español según entren en pantalla, sin entrar en ellos.
 - El mismo aspecto que la traducción de X: texto traducido en lugar del original y vuelta atrás a un clic. Se degrada en una cosa: dentro del texto traducido, enlaces, hashtags y menciones aparecen como texto plano.
 - Un solo trabajo a la vez y con ritmo, también con el servicio de X.
-- **La cuenta del Socio por encima de la traducción:** la extensión tiene techo y para.
+- **La cuenta de quien navega por encima de la traducción:** la extensión tiene techo y para.
 
 ## No objetivos
 
@@ -35,7 +35,7 @@ Si X sí pone el enlace, se pulsa como en la v1.
 - Traducir lo que ya está en el idioma de la interfaz.
 - Traducir publicaciones sin enlace permanente (no hay forma de pedirlas).
 - Interfaz, ajustes o atajos.
-- Coordinar varias pestañas de X: cada una lleva su cuenta (decisión del Socio).
+- Coordinar varias pestañas de X: cada una lleva su cuenta (decisión del mantenedor).
 
 ## Anti-objetivos: sería un fallo aunque «funcione»
 
@@ -67,11 +67,11 @@ Si X sí pone el enlace, se pulsa como en la v1.
    - **Comprobado en la X real (sonda del 26-nov-2026):** responde 200, pero con `{"translation":"","translationState":"NotCached","destinationLanguage":""}` para una publicación que Grok sí tradujo. Hoy solo parece servir traducciones que ya tuviera guardadas. Se mantiene como último recurso porque no puede devolver una traducción falsa: una traducción vacía cuenta como fallo.
    - Se prueba cuando el punto 1 falla por 404, 400, 401, 403, error de servidor, red, timeout o respuesta vacía. No cuando responde 429.
 
-Fuente de este contrato: la documentación pública de `dfrnoch/liquidX` (leída del paquete del cliente de X el 13-nov-2026) y de `rien7/twitter-extension-api`, y el código de `Noctyn/x-native-translator` y `llpgf/x-grok-visible-translate` (ambos MIT). Las tres rutas se probaron con la sesión del Socio el 26-nov-2026 con la sonda; el resultado está en cada punto y en «La sonda».
+Fuente de este contrato: la documentación pública de `dfrnoch/liquidX` (leída del paquete del cliente de X el 13-nov-2026) y de `rien7/twitter-extension-api`, y el código de `Noctyn/x-native-translator` y `llpgf/x-grok-visible-translate` (ambos MIT). Las tres rutas se probaron en la X real el 26-nov-2026 con la sonda; el resultado está en cada punto y en «La sonda».
 
 ## Techo y paro
 
-Ratificados por el Socio el 26-nov-2026:
+Ratificados por el mantenedor el 26-nov-2026:
 
 - **Por página:** 60 publicaciones pedidas desde que se cargó la página. Al llegar no se pide ninguna más hasta que se recargue. Aviso una sola vez.
 - **Por hora y pestaña:** 300 publicaciones pedidas en los últimos 60 minutos. Al llegar se espera a que se libere la ventana. Aviso una sola vez.
@@ -118,7 +118,7 @@ Ratificados por el Socio el 26-nov-2026:
 
 ## La sonda (Tarea 0, antes de construir el resto)
 
-Modo de diagnóstico temporal de la misma extensión, para aprender el contrato y el DOM reales con una sola prueba del Socio:
+Modo de diagnóstico temporal de la misma extensión, para aprender el contrato y el DOM reales con una sola prueba en la X real:
 
 - **No toca la página:** no pinta, no esconde y no pide traducciones. El camino del clic de la v1 sigue activo.
 - A los 5 s escribe **un único mensaje** en consola que empieza por `[X AutoTranslate SONDA]` con: si la cookie `lang` y la cookie `ct0` existen (sí o no, nunca el valor), el idioma de la interfaz, la ruta de la página y, de los tres primeros bloques candidatos: idioma, identificador y por qué regla, si está dentro de una caja de cita y un trozo del elemento anterior.
@@ -126,7 +126,7 @@ Modo de diagnóstico temporal de la misma extensión, para aprender el contrato 
 
 Con lo que salga se fijan las reglas 1, 3 y la sección «Cómo se pide a X» antes de escribir el resto.
 
-**Resultado (26-nov-2026, en la X real del Socio, hilo con respuestas en inglés):**
+**Resultado (26-nov-2026, en la X real, hilo con respuestas en inglés):**
 
 - Sesión e idioma: cookie `ct0` presente, `lang=es`, `<html lang>=es`.
 - Grok desde x.com: 200 en 715 ms, con la traducción en trozos `{"result":{"content_type":"POST","text":"…"}}`. Grok en `api.x.com`: 200 en 217 ms, el mismo texto entero, y deja leer sus cabeceras de límite.
@@ -139,7 +139,7 @@ Con ese resultado la sonda ya no hace falta y se quitó del código.
 
 ## Verificado en la X real y lo que falta
 
-1. **Verificado.** Las tres rutas responden con la sesión del Socio; X no exige `x-client-transaction-id`.
+1. **Verificado.** Las tres rutas responden con la sesión de quien navega; X no exige `x-client-transaction-id`.
 2. **Verificado en parte.** El bloque de texto lleva `lang`, y una respuesta tiene su enlace permanente donde se buscaba. El enlace de una cita dentro de un post: sin datos; si no está donde se busca, la cita no se traduce (nunca se traduce mal).
 3. **Verificado.** La barra de X traducido está delante del texto.
 4. **Verificado.** La llamada a `api.x.com` pasa desde el navegador.

@@ -60,7 +60,7 @@
     ...AJUSTES,
   });
 
-  // Techo de peticiones. Ratificado por el Socio el 26-nov-2026: la cuenta va por delante.
+  // Techo de peticiones. Decisión del mantenedor, 26-nov-2026: la cuenta va por delante.
   const TOPE = Object.freeze({
     PAGINA: AJUSTES.TOPE_PAGINA ?? 60,          // publicaciones pedidas desde que se cargó la página
     HORA: AJUSTES.TOPE_HORA ?? 300,             // publicaciones pedidas en la ventana
@@ -75,7 +75,7 @@
   const estado = new WeakMap();
   // X recicla artículos, así que las marcas por artículo recuerdan a qué publicación pertenecen.
   const articulosConBoton = new WeakMap(); // <article> → publicación que había al aparecer su botón
-  const revertidos = new WeakMap();        // <article> → publicación que el Socio devolvió al original
+  const revertidos = new WeakMap();        // <article> → publicación que quien navega devolvió al original
   const pendientes = new Map();     // botón → momento del último clic, a la espera de X
   const intentos = new WeakMap();   // botón → clics que ha recibido
 
@@ -83,7 +83,7 @@
   // del bloque que la pinta, que X crea, redibuja y reutiliza.
   const memoria = new Map();        // identificador → traducción que X ya contestó
   const fallidas = new Set();       // publicaciones que X no pudo traducir y se dejaron en paz
-  const devueltas = new Set();      // publicaciones que el Socio devolvió al original
+  const devueltas = new Set();      // publicaciones que quien navega devolvió al original
   const enCola = new Set();         // publicaciones con una tarea en cola: una sola por publicación
   const pedidas = new Set();        // publicaciones ya pedidas (para no contar dos veces)
   const pedidasPorHora = [];        // momentos de la primera petición de cada publicación
@@ -262,7 +262,7 @@
     const idArticulo = idDelArticulo(article);
     if (articulosConBoton.has(article) && articulosConBoton.get(article) !== idArticulo) articulosConBoton.delete(article);
     if (revertidos.has(article) && revertidos.get(article) !== idArticulo) revertidos.delete(article);
-    // Camino del clic. Donde el Socio volvió al original no se vuelve a pulsar nada.
+    // Camino del clic. Donde quien navega volvió al original no se vuelve a pulsar nada.
     if (!revertidos.has(article)) {
       for (const el of article.querySelectorAll('button, [role="button"]')) {
         if (estado.has(el) || esNuestro(el) || !esBotonTraducir(el)) continue;
@@ -1114,7 +1114,7 @@
     }
   }
 
-  // Si el Socio vuelve al original con el «Mostrar original» de X, en esa publicación no se
+  // Si quien navega vuelve al original con el «Mostrar original» de X, en esa publicación no se
   // vuelve a pulsar nada ni a pedir su traducción.
   document.addEventListener('click', (evento) => {
     const boton = evento.target instanceof Element ? evento.target.closest('button, [role="button"]') : null;
