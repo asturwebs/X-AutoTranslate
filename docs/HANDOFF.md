@@ -1,6 +1,6 @@
 # HANDOFF — X AutoTranslate
 
-Última actualización: 2026-11-26 22:5x (sesión BytIA)
+Última actualización: 2026-11-26 23:2x (sesión BytIA)
 
 ## Estado
 
@@ -9,7 +9,7 @@
 - La **v1.0.0** solo pulsaba el botón «Traducir publicación» de X. En la X real no sirve para las respuestas de un hilo, porque **X no pone ese botón en ellas**.
 - La **v2.0.0** añade un segundo camino: pedir la traducción al propio servicio de X y ponerla en el sitio del original. **Tiene que estar en `main` y subida al repo** (`asturwebs/X-AutoTranslate`, etiqueta `v2.0.0`). Si `main` no la tiene, la fusión del final de la sesión del 26-nov no llegó a hacerse: ver «Cómo continuar».
 - **Comprobado en la X real del Socio (sonda del 26-nov, tarde):** las tres rutas responden 200 con su sesión y Grok devuelve la traducción. Detalle en el diseño v2, sección «La sonda».
-- **Probada por el Socio en su X (26-nov, 22:2x–22:4x):** la 2.0.0 carga, pide y pone traducciones reales sin fallos (su consola a los 5 s: 18 bloques, pedidas 1, traducidas 1, fallidas 0, en espera 3, cupo de X 99 de 100) y al bajar por un hilo las respuestas se traducen: «Correcto, parece que funciona». Un fallo de aspecto: el texto traducido salía más pequeño y con otra letra que el de X, porque la caja heredaba la tipografía del padre del bloque y X la fija en el bloque. **Corregido en la 2.0.1**: el texto traducido toma la tipografía del bloque al que sustituye.
+- **Probada por el Socio en su X (26-nov, 22:2x–22:3x):** la 2.0.0 carga, pide y pone traducciones reales sin fallos (su consola a los 5 s: 18 bloques, pedidas 1, traducidas 1, fallidas 0, en espera 3, cupo de X 99 de 100) y al bajar por un hilo las respuestas se traducen: «Correcto, parece que funciona». Un fallo de aspecto: el texto traducido salía más pequeño y con otra letra que el de X, porque la caja heredaba la tipografía del padre del bloque y X la fija en el bloque. **Corregido en la 2.0.1**: el texto traducido toma la tipografía del bloque al que sustituye.
 - **Sin confirmar por él:** la 2.0.1 en su X (tamaño y letra del texto traducido; el aspecto de la barra propia junto a la de X, en oscuro y en claro). Pendiente su decisión sobre un gris clarito para el texto traducido: se le desaconsejó, porque baja el contraste de lo que se lee y la barra ya lo distingue.
 
 ## Dónde está cada cosa
@@ -53,7 +53,7 @@ Pasos que se le dieron al Socio el 26-nov por la noche: esos mismos.
 - **2026-11-26 18:2x–19:4x** — v2: Tarea 0 (sonda), Tareas 1 a 3 (camino de petición, caja, techo y paros).
 - **2026-11-26 19:4x–21:3x** — **revisión final del código** (revisor `opus`, contexto fresco): «lista para fusionar con arreglos». Dos críticos, siete importantes, trece menores. **Pasada de arreglos**, cada uno con su prueba vista en rojo antes y en verde después: estado por publicación (una publicación no se pide dos veces, lo que sale de pantalla en cola vuelve a empezar, lo que falló se deja en paz), los 429 cuentan para la pausa de tres fallos, disyuntor ante fallo sistémico, los textos aparcados no bloquean los clics, identidad de cada bloque a prueba de fallo, marcas por artículo con caducidad, tope de tiempo por publicación, avisos con lo que respondió X.
 - **2026-11-26 21:3x–22:xx** — **la sonda en la X real del Socio.** Resultado: Grok desde x.com responde 200 con la traducción (sin `x-client-transaction-id`); `api.x.com` ídem; la clásica responde 200 sin traducción (`NotCached`); cupo de 100 por ventana en Grok y 187 en el clásico. Con eso, cuatro ajustes con su prueba: el lector de trozos de Grok acepta salto de línea o espacio (sin ello, con trozos separados por espacios no habría traducido nada), reserva de cupo, el aviso enseña también lo que X responde en un 200 sin traducción, y la versión cargada en el resumen de página. La sonda se quitó del código. Bancada final: 67 escenarios en verde; de 51 roturas intencionadas del código, 47 cazadas a la primera y las otras 4 por roturas dobles (son defensas dobles: dos protecciones para el mismo fallo). Fusión en `main`, subida y etiqueta `v2.0.0`.
-- **2026-11-26 22:2x–22:5x** — **el Socio prueba la 2.0.0 en su X:** funciona. Le molesta que el texto traducido salga más pequeño (la otra letra no); sugiere un gris clarito para diferenciarlo, sin decidir. **2.0.1** (rama `fix/2.0.1-tipografia`, en un worktree aparte para no mover la carpeta de Chrome hasta verificar; fusión por avance rápido): el texto traducido toma la tipografía del bloque de X. Escenario nuevo `tipografia`. BytIA le desaconseja el gris para el texto.
+- **2026-11-26 22:3x–23:2x** — **el Socio prueba la 2.0.0 en su X:** funciona. Le molesta que el texto traducido salga más pequeño (la otra letra no); sugiere un gris clarito para diferenciarlo, sin decidir. **2.0.1** (rama `fix/2.0.1-tipografia`, en un worktree aparte para no mover la carpeta de Chrome hasta verificar; fusión por avance rápido): el texto traducido toma la tipografía del bloque de X. Escenario nuevo `tipografia`. BytIA le desaconseja el gris para el texto.
 
 ## Cómo probar (la bancada)
 
