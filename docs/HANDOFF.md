@@ -1,6 +1,6 @@
 # HANDOFF — X AutoTranslate
 
-Última actualización: 2026-11-26 23:2x (sesión BytIA)
+Última actualización: 2026-11-26 23:5x (sesión BytIA)
 
 ## Estado
 
@@ -44,6 +44,8 @@ Para un arreglo nuevo: subir el parche del manifiesto (`2.0.1`, `2.0.2`…), eti
 3. Bajar por las respuestas: cada una entra traducida, con la barra propia «Traducido del inglés · Mostrar original».
 4. Si algo no cuadra: F12 antes de recargar, y copiar la línea `[X AutoTranslate] Página:` y los avisos `[X AutoTranslate]` que salgan.
 
+Condiciones: X con la interfaz en español (la extensión traduce al idioma de la interfaz) y la sesión iniciada.
+
 Pasos que se le dieron al Socio el 26-nov por la noche: esos mismos.
 
 ## Hecho
@@ -54,8 +56,9 @@ Pasos que se le dieron al Socio el 26-nov por la noche: esos mismos.
 - **2026-11-26 18:2x–19:4x** — v2: Tarea 0 (sonda), Tareas 1 a 3 (camino de petición, caja, techo y paros).
 - **2026-11-26 19:4x–21:3x** — **revisión final del código** (revisor `opus`, contexto fresco): «lista para fusionar con arreglos». Dos críticos, siete importantes, trece menores. **Pasada de arreglos**, cada uno con su prueba vista en rojo antes y en verde después: estado por publicación (una publicación no se pide dos veces, lo que sale de pantalla en cola vuelve a empezar, lo que falló se deja en paz), los 429 cuentan para la pausa de tres fallos, disyuntor ante fallo sistémico, los textos aparcados no bloquean los clics, identidad de cada bloque a prueba de fallo, marcas por artículo con caducidad, tope de tiempo por publicación, avisos con lo que respondió X.
 - **2026-11-26 21:3x–22:xx** — **la sonda en la X real del Socio.** Resultado: Grok desde x.com responde 200 con la traducción (sin `x-client-transaction-id`); `api.x.com` ídem; la clásica responde 200 sin traducción (`NotCached`); cupo de 100 por ventana en Grok y 187 en el clásico. Con eso, cuatro ajustes con su prueba: el lector de trozos de Grok acepta salto de línea o espacio (sin ello, con trozos separados por espacios no habría traducido nada), reserva de cupo, el aviso enseña también lo que X responde en un 200 sin traducción, y la versión cargada en el resumen de página. La sonda se quitó del código. Bancada final: 67 escenarios en verde; de 51 roturas intencionadas del código, 47 cazadas a la primera y las otras 4 por roturas dobles (son defensas dobles: dos protecciones para el mismo fallo). Fusión en `main`, subida y etiqueta `v2.0.0`.
-- **2026-11-26 23:3x–23:4x** — **presencia en GitHub.** El Socio pregunta si el README está bien y si hay versiones para descargar. Había etiquetas pero ningún release. Publicadas las tres (1.0.0, 2.0.0 y 2.0.1 como última) con un zip hecho con `git archive` de cada etiqueta y notas en español; descripción del repo corregida (describía la v1) y temas añadidos; README con el enlace de descarga, la instalación desde el zip y fuera un consejo de la v1 que ya no valía.
 - **2026-11-26 22:3x–23:2x** — **el Socio prueba la 2.0.0 en su X:** funciona. Le molesta que el texto traducido salga más pequeño (la otra letra no); sugiere un gris clarito para diferenciarlo, sin decidir. **2.0.1** (rama `fix/2.0.1-tipografia`, en un worktree aparte para no mover la carpeta de Chrome hasta verificar; fusión por avance rápido): el texto traducido toma la tipografía del bloque de X. Escenario nuevo `tipografia`. BytIA le desaconseja el gris para el texto.
+- **2026-11-26 23:2x–23:3x** — **presencia en GitHub.** El Socio pregunta si el README está bien y si hay versiones para descargar. Había etiquetas pero ningún release. Publicadas las tres (1.0.0, 2.0.0 y 2.0.1 como última) con un zip hecho con `git archive` de cada etiqueta y notas en español; descripción del repo corregida (describía la v1) y temas añadidos; README con el enlace de descarga, la instalación desde el zip y fuera un consejo de la v1 que ya no valía.
+- **2026-11-26 23:3x–23:5x** — **dos correcciones del Socio a las primeras líneas del README.** Primero: no decían que traduce al español (commit `15c8652`; corregido también en la descripción del repo, las notas de las versiones y el registro de cambios). Después: que diga que **complementa a la traducción nativa de X**, porque las respuestas de un post no se traducen sin entrar en ellas; y que entre la configuración del idioma de X (texto sacado de Grok y comprobado por él). Hecho en `e1c43f8`: ese párrafo, arriba del todo; la sección «Instalación» con su encabezado (se había perdido en `c54ef43` y los pasos colgaban de «Estado»); antes de instalar, tres requisitos: X en español (la ruta de la ayuda oficial de X, la misma que comprobó el Socio), sesión iniciada y Chrome en el ordenador; en «Si no traduce», qué pasa si la interfaz de X no está en español. **La parte del móvil no entró**: es cierta según la ayuda de X, pero la extensión no se instala en la app del móvil. Las notas de la 2.0.1 y la 2.0.0 y la descripción del repo dicen lo mismo (preparado, comprobado y publicado en pasos separados).
 
 ## Cómo probar (la bancada)
 
@@ -73,7 +76,7 @@ Sin dependencias. Un Chromium sin cabeza con perfil temporal, por `--remote-debu
 2. **Licencia del repositorio.** Sin decidir; es del Socio.
 3. Publicar en la Chrome Web Store, si se quiere. Hoy se carga desempaquetada.
 4. Menores aplazados de las dos revisiones de código: la vuelta atrás con teclado, rendimiento sin medir, el manifiesto sin prueba automática (v1); una ventana tapada por otra no cuenta como oculta (solo `document.hidden`), `test/run.mjs` sin manejador de SIGINT/SIGTERM (v2); y usar `AbortSignal.timeout()` en vez de `AbortController` con `setTimeout` para el tope de tiempo de cada publicación, que es lo que pide la guía `js` de `modern-web-guidance` (comprobando también `TimeoutError`, no solo `AbortError`; hoy funciona igual con el temporizador manual). Y de la adversaria: coordinación entre pestañas, no hecha por decisión del Socio.
-5. La descripción del manifiesto (`description`, la que sale en `chrome://extensions`) no dice que traduce al español. Cambiarla en la próxima versión, para no sacar una solo por eso.
+5. La descripción del manifiesto (`description`, la que sale en `chrome://extensions`) no dice que traduce al español ni que complementa a la traducción de X. Texto propuesto para la próxima versión (114 caracteres; Chrome admite 132): «Complementa a la traducción de X: traduce al español, sin entrar en ellas, las respuestas que X deja sin traducir.». Cambiarla en la próxima versión, para no sacar una solo por eso.
 6. La ruta clásica de X, en la única medición real, no tradujo nada. Se queda como último recurso porque no puede devolver una traducción falsa; si en la prueba real no sirve para nada, se puede quitar y simplificar.
 
 ## Cómo continuar
@@ -105,6 +108,9 @@ Sin dependencias. Un Chromium sin cabeza con perfil temporal, por `--remote-debu
 - `chrome.runtime.getManifest()` es de las pocas API que un content script usa sin permisos: da la versión sin tocar el manifiesto.
 - **Verificar y publicar son dos pasos.** Un error en mi script de comprobación no frenó el comando que lo seguía y los zips de las versiones se publicaron sin verificar (se verificaron justo después y estaban bien). La verificación se lanza sola, se lee su resultado, y solo entonces se publica.
 - En la X real, la tipografía de un tuit va en el propio bloque de texto, no en su padre. Lo que se inserte al lado tiene que tomarla del bloque (`getComputedStyle` pasado a variables CSS); si hereda del padre, sale más pequeño.
+- **Tras editar documentación, mirar sus encabezados antes de commitear.** En `c54ef43` se borró sin querer el encabezado `## Instalación` del README: los pasos quedaron colgando de «Estado» y se publicó así, sin que nadie lo viera hasta el cambio siguiente. `grep -n '^## '` y el diff, leídos, lo cazan.
+- **Las primeras líneas de una presentación dicen lo esencial, y lo esencial incluye cómo encaja con lo que ya existe.** Dos correcciones del Socio el mismo día: que traduce al español, y que complementa a la traducción nativa de X.
+- **Un texto de configuración ajeno se comprueba antes de entrar en el README.** El de esta sesión (la ruta del idioma de X) venía de Grok; coincidía con la ayuda oficial de X y el Socio lo había comprobado en su X, así que entró. Su parte del móvil no: la extensión no se instala en la app del móvil.
 
 ## Referencias
 
@@ -112,4 +118,5 @@ Sin dependencias. Un Chromium sin cabeza con perfil temporal, por `--remote-debu
 - `Noctyn/x-native-translator` (MIT): userscript con cola y pausas ante 429; llama a la API de traducción de X.
 - `dfrnoch/liquidX` y `rien7/twitter-extension-api`: documentación pública del contrato del servicio de traducción.
 - Documentación de Chrome sobre content scripts: `https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts` (qué API usan sin permisos).
+- Ayuda de X sobre el idioma de visualización (la ruta que cita el README): `https://help.x.com/es/managing-your-account/how-to-change-language-settings`. Límites del manifiesto de Chrome (la descripción admite 132 caracteres): `https://developer.chrome.com/docs/extensions/reference/manifest`.
 - Revisión adversaria de la v2 y registro del plan: `~/Work/x-autotranslate-adversarial-v2/`.
