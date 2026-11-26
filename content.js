@@ -803,6 +803,19 @@
     const caja = document.createElement('div');
     caja.className = 'xat-caja';
     caja.setAttribute('data-xat-id', id);
+    // La tipografía del texto es la del bloque de X al que sustituye: X fija el tamaño, la
+    // fuente y el interlineado en el propio bloque, no en su padre, y heredando del padre el
+    // texto traducido salía más pequeño (X real, 26-nov-2026). Se toman del bloque como
+    // variables que usan las reglas de content.css; si alguna faltara, se hereda como antes.
+    const estilo = getComputedStyle(nodo);
+    const tipografia = {
+      '--xat-fuente': estilo.fontFamily,
+      '--xat-tamano': estilo.fontSize,
+      '--xat-peso': estilo.fontWeight,
+      '--xat-interlineado': estilo.lineHeight,
+      '--xat-espaciado': estilo.letterSpacing,
+    };
+    for (const [variable, valor] of Object.entries(tipografia)) if (valor) caja.style.setProperty(variable, valor);
     const barra = document.createElement('div');
     barra.className = 'xat-barra';
     const rotulo = document.createElement('span');

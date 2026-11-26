@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "X AutoTranslate",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Traduce por ti en X lo que entra en pantalla y X no traduce sola: respuestas, hilos y publicaciones.",
   "content_scripts": [
     {

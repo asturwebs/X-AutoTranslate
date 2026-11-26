@@ -39,7 +39,14 @@ div[data-testid="tweetText"][data-xat="traducido"] {
   outline-offset: 2px;
 }
 
+/* La tipografía del texto traducido es la del bloque de X al que sustituye: content.js la toma
+   del bloque en estas variables. Si falta alguna, se hereda. */
 .xat-texto {
+  font-family: var(--xat-fuente, inherit);
+  font-size: var(--xat-tamano, inherit);
+  font-weight: var(--xat-peso, inherit);
+  line-height: var(--xat-interlineado, inherit);
+  letter-spacing: var(--xat-espaciado, inherit);
   unicode-bidi: plaintext;
   overflow-wrap: anywhere;
   white-space: pre-wrap;

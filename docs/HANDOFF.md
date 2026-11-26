@@ -1,16 +1,16 @@
 # HANDOFF — X AutoTranslate
 
-Última actualización: 2026-11-26 22:xx (sesión BytIA)
+Última actualización: 2026-11-26 22:5x (sesión BytIA)
 
 ## Estado
 
-🟢 **v2.0.0 terminada, probada en el simulador, con su forma de pedir la traducción comprobada en la X real y con la primera traducción real ya pedida y puesta en la X del Socio. Falta su confirmación visual.**
+🟢 **v2.0.1: la v2 funciona en la X real del Socio; esta versión corrige el tamaño y la letra del texto traducido. Falta que él confirme la 2.0.1.**
 
 - La **v1.0.0** solo pulsaba el botón «Traducir publicación» de X. En la X real no sirve para las respuestas de un hilo, porque **X no pone ese botón en ellas**.
 - La **v2.0.0** añade un segundo camino: pedir la traducción al propio servicio de X y ponerla en el sitio del original. **Tiene que estar en `main` y subida al repo** (`asturwebs/X-AutoTranslate`, etiqueta `v2.0.0`). Si `main` no la tiene, la fusión del final de la sesión del 26-nov no llegó a hacerse: ver «Cómo continuar».
 - **Comprobado en la X real del Socio (sonda del 26-nov, tarde):** las tres rutas responden 200 con su sesión y Grok devuelve la traducción. Detalle en el diseño v2, sección «La sonda».
-- **Primera prueba del Socio (26-nov, 22:2x):** la 2.0.0 carga (su consola dice `v2.0.0`) y ya pidió y puso una traducción real. Su resumen a los 5 s: 18 bloques de texto, pedidas 1, traducidas 1, fallidas 0, en espera 3 (y una en vuelo, que ahí no cuenta), cupo de X 99 de 100. Ningún aviso de fallo.
-- **Sin comprobar todavía:** el aspecto de la barra propia junto a la de X y el recorrido de un hilo entero bajando.
+- **Probada por el Socio en su X (26-nov, 22:2x–22:4x):** la 2.0.0 carga, pide y pone traducciones reales sin fallos (su consola a los 5 s: 18 bloques, pedidas 1, traducidas 1, fallidas 0, en espera 3, cupo de X 99 de 100) y al bajar por un hilo las respuestas se traducen: «Correcto, parece que funciona». Un fallo de aspecto: el texto traducido salía más pequeño y con otra letra que el de X, porque la caja heredaba la tipografía del padre del bloque y X la fija en el bloque. **Corregido en la 2.0.1**: el texto traducido toma la tipografía del bloque al que sustituye.
+- **Sin confirmar por él:** la 2.0.1 en su X (tamaño y letra del texto traducido; el aspecto de la barra propia junto a la de X, en oscuro y en claro). Pendiente su decisión sobre un gris clarito para el texto traducido: se le desaconsejó, porque baja el contraste de lo que se lee y la barra ya lo distingue.
 
 ## Dónde está cada cosa
 
@@ -31,14 +31,14 @@ El worktree de desarrollo `~/Projects/X-AutoTranslate-dev` y la rama `feature/v2
 
 El Socio pidió versionar cada build para saber que la extensión se recarga bien. Cada build que se le entregue lleva su número:
 
-- en `chrome://extensions` se ve la versión del manifiesto (la v1 era `1.0.0`; esta es `2.0.0`);
-- en la consola de X, la línea `[X AutoTranslate] Página:` empieza por la versión cargada: `v2.0.0 · bloques de texto …`.
+- en `chrome://extensions` se ve la versión del manifiesto (la v1 era `1.0.0`; la 2.0.0 fue la primera que tradujo en su X; esta es `2.0.1`);
+- en la consola de X, la línea `[X AutoTranslate] Página:` empieza por la versión cargada: `v2.0.1 · bloques de texto …`.
 
 Para un arreglo nuevo: subir el parche del manifiesto (`2.0.1`, `2.0.2`…), etiquetar el commit con el mismo número y decírselo.
 
 ## Cómo probarla en la X real
 
-1. `chrome://extensions` → botón de recargar de X AutoTranslate → comprobar que pone `2.0.0`.
+1. `chrome://extensions` → botón de recargar de X AutoTranslate → comprobar que pone `2.0.1`.
 2. Abrir un hilo con respuestas en otro idioma. Recargar la pestaña: las pestañas que ya estaban abiertas conservan el guion viejo.
 3. Bajar por las respuestas: cada una entra traducida, con la barra propia «Traducido del inglés · Mostrar original».
 4. Si algo no cuadra: F12 antes de recargar, y copiar la línea `[X AutoTranslate] Página:` y los avisos `[X AutoTranslate]` que salgan.
@@ -53,6 +53,7 @@ Pasos que se le dieron al Socio el 26-nov por la noche: esos mismos.
 - **2026-11-26 18:2x–19:4x** — v2: Tarea 0 (sonda), Tareas 1 a 3 (camino de petición, caja, techo y paros).
 - **2026-11-26 19:4x–21:3x** — **revisión final del código** (revisor `opus`, contexto fresco): «lista para fusionar con arreglos». Dos críticos, siete importantes, trece menores. **Pasada de arreglos**, cada uno con su prueba vista en rojo antes y en verde después: estado por publicación (una publicación no se pide dos veces, lo que sale de pantalla en cola vuelve a empezar, lo que falló se deja en paz), los 429 cuentan para la pausa de tres fallos, disyuntor ante fallo sistémico, los textos aparcados no bloquean los clics, identidad de cada bloque a prueba de fallo, marcas por artículo con caducidad, tope de tiempo por publicación, avisos con lo que respondió X.
 - **2026-11-26 21:3x–22:xx** — **la sonda en la X real del Socio.** Resultado: Grok desde x.com responde 200 con la traducción (sin `x-client-transaction-id`); `api.x.com` ídem; la clásica responde 200 sin traducción (`NotCached`); cupo de 100 por ventana en Grok y 187 en el clásico. Con eso, cuatro ajustes con su prueba: el lector de trozos de Grok acepta salto de línea o espacio (sin ello, con trozos separados por espacios no habría traducido nada), reserva de cupo, el aviso enseña también lo que X responde en un 200 sin traducción, y la versión cargada en el resumen de página. La sonda se quitó del código. Bancada final: 67 escenarios en verde; de 51 roturas intencionadas del código, 47 cazadas a la primera y las otras 4 por roturas dobles (son defensas dobles: dos protecciones para el mismo fallo). Fusión en `main`, subida y etiqueta `v2.0.0`.
+- **2026-11-26 22:2x–22:5x** — **el Socio prueba la 2.0.0 en su X:** funciona. Le molesta que el texto traducido salga más pequeño (la otra letra no); sugiere un gris clarito para diferenciarlo, sin decidir. **2.0.1** (rama `fix/2.0.1-tipografia`, en un worktree aparte para no mover la carpeta de Chrome hasta verificar; fusión por avance rápido): el texto traducido toma la tipografía del bloque de X. Escenario nuevo `tipografia`. BytIA le desaconseja el gris para el texto.
 
 ## Cómo probar (la bancada)
 
@@ -66,7 +67,7 @@ Sin dependencias. Un Chromium sin cabeza con perfil temporal, por `--remote-debu
 
 ## Pendientes
 
-1. **Prueba en la X real del Socio con la v2:** que las respuestas se traducen según baja; el aspecto de la barra propia junto a la de X (tema oscuro y claro); el salto de alto de la celda al crecer. Cada arreglo, con su número de versión.
+1. **Confirmación de la 2.0.1 por el Socio:** tamaño y letra del texto traducido, iguales a los de X; aspecto de la barra propia junto a la de X (tema oscuro y claro); el salto de alto de la celda al crecer. Cada arreglo, con su número de versión.
 2. **Licencia del repositorio.** Sin decidir; es del Socio.
 3. Publicar en la Chrome Web Store, si se quiere. Hoy se carga desempaquetada.
 4. Menores aplazados de las dos revisiones de código: la vuelta atrás con teclado, rendimiento sin medir, el manifiesto sin prueba automática (v1); una ventana tapada por otra no cuenta como oculta (solo `document.hidden`), `test/run.mjs` sin manejador de SIGINT/SIGTERM (v2); y usar `AbortSignal.timeout()` en vez de `AbortController` con `setTimeout` para el tope de tiempo de cada publicación, que es lo que pide la guía `js` de `modern-web-guidance` (comprobando también `TimeoutError`, no solo `AbortError`; hoy funciona igual con el temporizador manual). Y de la adversaria: coordinación entre pestañas, no hecha por decisión del Socio.
@@ -99,6 +100,7 @@ Sin dependencias. Un Chromium sin cabeza con perfil temporal, por `--remote-debu
 - El nivel de `console.warn` en el protocolo de depuración es `warning`, no `warn`.
 - La revisión adversaria con dos motores distintos cazó en 15 minutos lo que el autor no vio en una hora de diseño: entre otros, que la extensión se pulsaría a sí misma y que no tenía techo de peticiones. La revisión final del código con otro motor cazó dos defectos de corrección que 41 escenarios en verde no veían.
 - `chrome.runtime.getManifest()` es de las pocas API que un content script usa sin permisos: da la versión sin tocar el manifiesto.
+- En la X real, la tipografía de un tuit va en el propio bloque de texto, no en su padre. Lo que se inserte al lado tiene que tomarla del bloque (`getComputedStyle` pasado a variables CSS); si hereda del padre, sale más pequeño.
 
 ## Referencias
 

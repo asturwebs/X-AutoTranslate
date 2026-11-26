@@ -1825,6 +1825,39 @@
     comprobar: () => [],
   },
 
+  // En la X real el texto traducido salía más pequeño y con otra pinta que el de X: X fija el
+  // tamaño, la fuente y el interlineado en el propio bloque de texto, no en su padre, y nuestra
+  // caja heredaba del padre. El texto toma ahora la tipografía del bloque al que sustituye.
+  tipografia: {
+    sesion: true,
+    api: { latenciaMs: 50 },
+    async ejecutar(c) {
+      c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'Same type as the original.' });
+      c.crearPublicacion({ id: 'r2', boton: 'ninguno', texto: 'Another size, another block.' });
+      // Como hace X: la tipografía va en el bloque, y cambia de un bloque a otro.
+      c.nodoDe('r1').style.cssText = 'font-size: 19px; line-height: 24px; font-family: Georgia, serif; font-weight: 500; letter-spacing: 0.4px';
+      c.nodoDe('r2').style.cssText = 'font-size: 22px; line-height: 28px; font-family: Verdana, sans-serif; font-weight: 700';
+      await c.avanzar(2500);
+    },
+    comprobar(c) {
+      const fallos = [];
+      const comprobarBloque = (id, tamano, interlineado, familia, peso, espaciado) => {
+        const caja = c.cajaDe(id);
+        const texto = getComputedStyle(caja.querySelector('.xat-texto'));
+        if (texto.fontSize !== tamano || texto.lineHeight !== interlineado || !texto.fontFamily.includes(familia)
+          || texto.fontWeight !== peso || texto.letterSpacing !== espaciado) {
+          fallos.push(`el texto de ${id} tiene ${texto.fontWeight} ${texto.fontSize}/${texto.lineHeight} ${texto.fontFamily.split(',')[0]} `
+            + `(espaciado ${texto.letterSpacing}) y debe tener la tipografía de su bloque: ${peso} ${tamano}/${interlineado} ${familia} (espaciado ${espaciado})`);
+        }
+        // La barra es de la extensión: conserva su tamaño.
+        const barra = getComputedStyle(caja.querySelector('.xat-barra'));
+        if (barra.fontSize !== '13px') fallos.push(`la barra de ${id} cambió de tamaño (${barra.fontSize}) y debe seguir en 13px`);
+      };
+      comprobarBloque('r1', '19px', '24px', 'Georgia', '500', '0.4px');
+      comprobarBloque('r2', '22px', '28px', 'Verdana', '700', 'normal');
+      return fallos;
+    },
+  },
   });
 
   // ---- Arranque----------------------------------------------------------------

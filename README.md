@@ -12,7 +12,7 @@ X ofrece traducción automática para los posts (se activa por idioma), pero no 
 
 - Según scrolleas, traduce cada publicación visible que X dejó sin traducir.
 - Si X pone un enlace «Traducir publicación», lo pulsa.
-- Si no pone nada (es lo que pasa en las respuestas), le pide a X su traducción, a su propio servicio de traducción y con tu sesión, y la pone en el sitio del original con una barra «Traducido del inglés · Mostrar original».
+- Si no pone nada (es lo que pasa en las respuestas), le pide a X su traducción, a su propio servicio de traducción y con tu sesión, y la pone en el sitio del original, con la misma letra que el texto de X y una barra «Traducido del inglés · Mostrar original».
 - Con «Mostrar original» vuelves al texto de X; con «Mostrar traducción», a la traducción. Lo que devuelves al original no se vuelve a traducir en esa página.
 - Va de una en una y con ritmo: una petición cada vez, con un hueco aleatorio de 0,6 a 1,5 s.
 
@@ -42,7 +42,7 @@ Riesgo que queda: X puede cambiar o limitar su servicio de traducción, o tomar 
 
 ## Estado
 
-**v2.0.0.** Probada contra una página que simula a X, con un servicio de traducción falso, y su forma de pedir la traducción **comprobada con una sesión real de X el 26-nov-2026**: las tres rutas responden y Grok devuelve la traducción. Lo que todavía no está probado es la extensión entera en la X real: el aspecto de la barra propia junto a la de X y cuánto aguanta el ritmo. Si no traduce, mira [Si no traduce](#si-no-traduce).
+**v2.0.1.** Probada contra una página que simula a X, con un servicio de traducción falso; su forma de pedir la traducción, comprobada con una sesión real de X el 26-nov-2026; y la 2.0.0, probada entera en la X real: las respuestas de un hilo se traducen al bajar. La 2.0.1 corrige el tamaño y la letra del texto traducido, que salían más pequeños que los de X. Si no traduce, mira [Si no traduce](#si-no-traduce).
 
 ## Instalación
 
@@ -59,7 +59,7 @@ Para quitarla, «Quitar» en esa misma página. Para actualizarla tras cambiar e
 1. Abre x.com en una pestaña normal, no en la ventana de la web app.
 2. Pulsa F12 y ve a **Console**. Hazlo antes de nada: el diagnóstico sale una sola vez, 5 s después de cargar la página.
 3. Recarga la página con abierto el hilo que no se traduce.
-4. Busca la línea que empieza por `[X AutoTranslate] Página:`. Empieza con **la versión que tienes cargada** (`v2.0.0`): si no es la que esperabas, la extensión no llegó a recargarse. El resto cuenta lo que hay en la página y explica casi todos los casos:
+4. Busca la línea que empieza por `[X AutoTranslate] Página:`. Empieza con **la versión que tienes cargada** (`v2.0.1`): si no es la que esperabas, la extensión no llegó a recargarse. El resto cuenta lo que hay en la página y explica casi todos los casos:
    - `cupo de X en esta ventana`: cuántas peticiones le quedan a tu cuenta en los 15 minutos en curso. Baja y no sube hasta que pasa el rato.
    - `sin enlace permanente` sube y no se traduce nada: X cambió dónde pone el enlace de cada publicación. Abre un issue con esa línea.
    - `ya traducidas por X`: se quedan como están, X las tradujo.

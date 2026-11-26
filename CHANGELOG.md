@@ -8,6 +8,16 @@ Cada build que se cargue en Chrome lleva su número. Se ve en `chrome://extensio
 
 Nada. Lo que hay pendiente está en [docs/HANDOFF.md](docs/HANDOFF.md).
 
+## [2.0.1] - 2026-11-26
+
+### Corregido
+
+- El texto traducido salía más pequeño y con otra letra que el de X. Ahora toma la tipografía del bloque de X al que sustituye: fuente, tamaño, peso, interlineado y espaciado. La barra «Traducido del…» conserva su tamaño.
+
+### Comprobado
+
+- La 2.0.0, probada entera en la X real: las respuestas de un hilo se traducen al bajar.
+
 ## [2.0.0] - 2026-11-26
 
 La v1 solo pulsaba el botón «Traducir publicación» de X, y X no pone ese botón en las respuestas de un hilo. La v2 añade un segundo camino para lo que X deja sin traducir.
@@ -45,5 +55,6 @@ La v1 solo pulsaba el botón «Traducir publicación» de X, y X no pone ese bot
 
 - **26-nov-2026, commit `e090492`** (número 1.0.0, sin cambiar): la v1 con una sonda que describía la página y hacía una petición por ruta a X, sin tocar nada. Solo para aprender el contrato y el DOM reales antes de construir la v2. Sin etiqueta.
 
+[2.0.1]: https://github.com/asturwebs/X-AutoTranslate/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/asturwebs/X-AutoTranslate/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/asturwebs/X-AutoTranslate/tree/v1.0.0
