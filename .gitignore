@@ -1,0 +1,14 @@
+# Claves de firma de la extensión: nunca al repositorio
+*.pem
+*.crx
+
+# Paquetes generados
+*.zip
+
+# Dependencias
+node_modules/
+
+# Editores y herramientas locales
+.claude/
+.idea/
+.vscode/
