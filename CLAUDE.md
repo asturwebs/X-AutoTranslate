@@ -8,6 +8,7 @@ Extensión de Chrome (Manifest V3) que traduce por ti en X lo que entra en panta
 - `content.js`: todo el comportamiento, con comentarios que explican el porqué. Dos caminos: pulsar el botón de X (si lo pone) y pedirle la traducción a su servicio.
 - `test/`: la bancada. `run.mjs` dirige un Chromium sin cabeza sobre `mock-x.html`; `driver.js` simula a X y su servicio de traducción.
 - `CHANGELOG.md`: qué cambia en cada versión.
+- [Releases de GitHub](https://github.com/asturwebs/X-AutoTranslate/releases): cada versión publicada, con un zip listo para cargar en Chrome (`manifest.json`, `content.js`, `content.css`) y sus notas.
 - `docs/`: handoff del proyecto, y los diseños y planes de la v1 y de la v2.
 
 ## Probar
@@ -27,7 +28,9 @@ Necesita Node y Chromium en `/usr/lib/chromium/chromium` (o `XAT_CHROME`). No ab
 - **A prueba de fallo ante el DOM de X.** Si no hay manera segura de saber de qué publicación es un bloque, no se pide. Antes no traducir que traducir bajo otra publicación.
 - **Primero la prueba, en rojo.** Cada cambio de comportamiento nace como un escenario de `test/driver.js` que falla; después el código; después la suite entera. Un escenario que pasa antes de escribir el código dice algo de la prueba, no del código.
 - **Romper el código a propósito.** Las pruebas se comprueban rompiendo la línea que deben vigilar. La lista de roturas se conserva fuera del repo (ver `docs/HANDOFF.md`).
-- **Cada build que se cargue lleva su número.** Subir la versión del manifiesto, anotarla en `CHANGELOG.md` y etiquetar el commit con el mismo número. La consola enseña la versión cargada gracias a `chrome.runtime.getManifest()`.
+- **Cada build que se cargue lleva su número.** Subir la versión del manifiesto, anotarla en `CHANGELOG.md`, etiquetar el commit con el mismo número y publicar el release con su zip. La consola enseña la versión cargada gracias a `chrome.runtime.getManifest()`.
+  Para el zip: `git archive --format=zip --output=X-AutoTranslate-<versión>.zip v<versión> manifest.json content.js content.css`; para publicarlo: `gh release create v<versión> <zip> --notes-file <notas>`.
+- **Publicar es un paso aparte.** Primero se verifica (y se lee su resultado); solo entonces se publica, en otro comando. Si la verificación falla a medias y todo iba encadenado, lo que sigue se publica sin comprobar.
 - **Commits** en español, con prefijo convencional (`feat:`, `fix:`, `docs:`), rutas explícitas en `git add` y remate `Co-Authored-By: BytIA <bytia@bytia.es>`.
 
 ## Trampas ya pagadas

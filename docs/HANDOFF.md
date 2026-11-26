@@ -22,6 +22,7 @@
 | `docs/superpowers/specs/` | Diseño de la v1 y de la v2 (el de la v2 lleva el resultado de la sonda) |
 | `docs/superpowers/plans/` | Planes de la v1 y de la v2, con las enmiendas de la ejecución |
 | `CHANGELOG.md` | Qué cambia en cada versión |
+| [Releases de GitHub](https://github.com/asturwebs/X-AutoTranslate/releases) | Cada versión publicada: un zip con `manifest.json`, `content.js` y `content.css`, listo para cargar en Chrome, y sus notas |
 | `CLAUDE.md` | Reglas para trabajar en el proyecto: dónde está cada cosa, cómo probar y lo que no se toca |
 | `~/Work/x-autotranslate-adversarial-v2/` | Revisión adversaria del diseño (congelado, briefs, informes, `delta.md`) copia del registro de ejecución del plan v2 (`registro-v2-progress.md`: decisiones tomadas y menores aplazados) y la lista de roturas del código (`mutar-v2.py`); su `README.md` indexa la carpeta |
 
@@ -53,6 +54,7 @@ Pasos que se le dieron al Socio el 26-nov por la noche: esos mismos.
 - **2026-11-26 18:2x–19:4x** — v2: Tarea 0 (sonda), Tareas 1 a 3 (camino de petición, caja, techo y paros).
 - **2026-11-26 19:4x–21:3x** — **revisión final del código** (revisor `opus`, contexto fresco): «lista para fusionar con arreglos». Dos críticos, siete importantes, trece menores. **Pasada de arreglos**, cada uno con su prueba vista en rojo antes y en verde después: estado por publicación (una publicación no se pide dos veces, lo que sale de pantalla en cola vuelve a empezar, lo que falló se deja en paz), los 429 cuentan para la pausa de tres fallos, disyuntor ante fallo sistémico, los textos aparcados no bloquean los clics, identidad de cada bloque a prueba de fallo, marcas por artículo con caducidad, tope de tiempo por publicación, avisos con lo que respondió X.
 - **2026-11-26 21:3x–22:xx** — **la sonda en la X real del Socio.** Resultado: Grok desde x.com responde 200 con la traducción (sin `x-client-transaction-id`); `api.x.com` ídem; la clásica responde 200 sin traducción (`NotCached`); cupo de 100 por ventana en Grok y 187 en el clásico. Con eso, cuatro ajustes con su prueba: el lector de trozos de Grok acepta salto de línea o espacio (sin ello, con trozos separados por espacios no habría traducido nada), reserva de cupo, el aviso enseña también lo que X responde en un 200 sin traducción, y la versión cargada en el resumen de página. La sonda se quitó del código. Bancada final: 67 escenarios en verde; de 51 roturas intencionadas del código, 47 cazadas a la primera y las otras 4 por roturas dobles (son defensas dobles: dos protecciones para el mismo fallo). Fusión en `main`, subida y etiqueta `v2.0.0`.
+- **2026-11-26 23:3x–23:4x** — **presencia en GitHub.** El Socio pregunta si el README está bien y si hay versiones para descargar. Había etiquetas pero ningún release. Publicadas las tres (1.0.0, 2.0.0 y 2.0.1 como última) con un zip hecho con `git archive` de cada etiqueta y notas en español; descripción del repo corregida (describía la v1) y temas añadidos; README con el enlace de descarga, la instalación desde el zip y fuera un consejo de la v1 que ya no valía.
 - **2026-11-26 22:3x–23:2x** — **el Socio prueba la 2.0.0 en su X:** funciona. Le molesta que el texto traducido salga más pequeño (la otra letra no); sugiere un gris clarito para diferenciarlo, sin decidir. **2.0.1** (rama `fix/2.0.1-tipografia`, en un worktree aparte para no mover la carpeta de Chrome hasta verificar; fusión por avance rápido): el texto traducido toma la tipografía del bloque de X. Escenario nuevo `tipografia`. BytIA le desaconseja el gris para el texto.
 
 ## Cómo probar (la bancada)
@@ -77,7 +79,7 @@ Sin dependencias. Un Chromium sin cabeza con perfil temporal, por `--remote-debu
 
 1. Leer este fichero y el diseño v2 (`docs/superpowers/specs/2026-11-26-x-autotranslate-v2-design.md`).
 2. Si el Socio ya probó la v2: partir de lo que diga y de la línea `[X AutoTranslate] Página:` de su consola.
-3. Arreglo → prueba en rojo → código → verde → suite entera → subir la versión del parche → commit → subir `main` → avisar al Socio con el número.
+3. Arreglo → prueba en rojo → código → verde → suite entera → subir la versión del parche → commit → subir `main` → etiquetar → publicar el release con su zip (ver `CLAUDE.md`) → avisar al Socio con el número.
 4. Al cerrar una sesión con trabajo de código, actualizar este fichero y el `HANDOFF.md` del home.
 
 ## Lecciones que ya están pagadas
@@ -100,6 +102,7 @@ Sin dependencias. Un Chromium sin cabeza con perfil temporal, por `--remote-debu
 - El nivel de `console.warn` en el protocolo de depuración es `warning`, no `warn`.
 - La revisión adversaria con dos motores distintos cazó en 15 minutos lo que el autor no vio en una hora de diseño: entre otros, que la extensión se pulsaría a sí misma y que no tenía techo de peticiones. La revisión final del código con otro motor cazó dos defectos de corrección que 41 escenarios en verde no veían.
 - `chrome.runtime.getManifest()` es de las pocas API que un content script usa sin permisos: da la versión sin tocar el manifiesto.
+- **Verificar y publicar son dos pasos.** Un error en mi script de comprobación no frenó el comando que lo seguía y los zips de las versiones se publicaron sin verificar (se verificaron justo después y estaban bien). La verificación se lanza sola, se lee su resultado, y solo entonces se publica.
 - En la X real, la tipografía de un tuit va en el propio bloque de texto, no en su padre. Lo que se inserte al lado tiene que tomarla del bloque (`getComputedStyle` pasado a variables CSS); si hereda del padre, sale más pequeño.
 
 ## Referencias

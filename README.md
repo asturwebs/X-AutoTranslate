@@ -2,7 +2,7 @@
 
 Extensión de Chrome que traduce por ti en X lo que va entrando en pantalla: las respuestas de un hilo, las citas y cualquier publicación que X no traduce sola.
 
-Los cambios de cada versión están en [CHANGELOG.md](CHANGELOG.md).
+La última versión está en [Releases](https://github.com/asturwebs/X-AutoTranslate/releases/latest), en un zip listo para cargar en Chrome. El registro de cambios está en [CHANGELOG.md](CHANGELOG.md).
 
 ## Por qué
 
@@ -44,23 +44,23 @@ Riesgo que queda: X puede cambiar o limitar su servicio de traducción, o tomar 
 
 **v2.0.1.** Probada contra una página que simula a X, con un servicio de traducción falso; su forma de pedir la traducción, comprobada con una sesión real de X el 26-nov-2026; y la 2.0.0, probada entera en la X real: las respuestas de un hilo se traducen al bajar. La 2.0.1 corrige el tamaño y la letra del texto traducido, que salían más pequeños que los de X. Si no traduce, mira [Si no traduce](#si-no-traduce).
 
-## Instalación
+Hace falta tener la sesión iniciada en X. Está probada solo en Chrome.
 
-1. Descarga o clona esta carpeta.
+1. Descarga el zip de la [última versión](https://github.com/asturwebs/X-AutoTranslate/releases/latest) y descomprímelo, o clona el repo.
 2. Chrome → `chrome://extensions`.
 3. Activa «Modo de desarrollador» (arriba a la derecha).
-4. «Cargar descomprimida» y elige la carpeta del proyecto, la que tiene `manifest.json`.
+4. «Cargar descomprimida» y elige la carpeta descomprimida, la que tiene `manifest.json`.
 5. Recarga la pestaña de X.
 
-Para quitarla, «Quitar» en esa misma página. Para actualizarla tras cambiar el código, el botón de recargar de la extensión y luego recargar la pestaña de X.
+Para quitarla, «Quitar» en esa misma página. Para actualizarla, descomprime el zip de la versión nueva sobre la misma carpeta, pulsa el botón de recargar de la extensión y recarga la pestaña de X: la versión nueva aparece en `chrome://extensions`. Todas las versiones están en [Releases](https://github.com/asturwebs/X-AutoTranslate/releases).
 
 ## Si no traduce
 
-1. Abre x.com en una pestaña normal, no en la ventana de la web app.
-2. Pulsa F12 y ve a **Console**. Hazlo antes de nada: el diagnóstico sale una sola vez, 5 s después de cargar la página.
-3. Recarga la página con abierto el hilo que no se traduce.
-4. Busca la línea que empieza por `[X AutoTranslate] Página:`. Empieza con **la versión que tienes cargada** (`v2.0.1`): si no es la que esperabas, la extensión no llegó a recargarse. El resto cuenta lo que hay en la página y explica casi todos los casos:
-   - `cupo de X en esta ventana`: cuántas peticiones le quedan a tu cuenta en los 15 minutos en curso. Baja y no sube hasta que pasa el rato.
+1. Abre el hilo que no se traduce.
+2. Pulsa F12 y ve a **Console**. Hazlo antes de nada: el diagnóstico sale una sola vez, 5 s después de cargar la página. También vale en la ventana de la web app.
+3. Recarga la página.
+4. Busca la línea que empieza por `[X AutoTranslate] Página:`. Empieza con **la versión que tienes cargada** (por ejemplo `v2.0.1`): si no es la que esperabas, la extensión no llegó a recargarse. El resto cuenta lo que hay en la página y explica casi todos los casos:
+   - `cupo de X en esta ventana`: cuántas peticiones le quedan a tu cuenta en la ventana en curso (unos 15 minutos). Baja y no sube hasta que pasa el rato.
    - `sin enlace permanente` sube y no se traduce nada: X cambió dónde pone el enlace de cada publicación. Abre un issue con esa línea.
    - `ya traducidas por X`: se quedan como están, X las tradujo.
    - `en el idioma de la interfaz`: no hace falta traducirlas.
