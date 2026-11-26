@@ -168,7 +168,7 @@
   // Hilo cuyo post principal cita otra publicación. Cada una lleva su enlace permanente y,
   // si `boton` no es 'ninguno', su botón de traducir. Traducir el principal redibuja el
   // contenido del artículo: el <article> es el mismo elemento, pero todos sus hijos son nuevos.
-  function crearHilo({ id, cita, retrasoMs = 50, boton = 'texto', sinEnlaceEnCita = false }) {
+  function crearHilo({ id, cita, retrasoMs = 50, boton = 'texto', sinEnlaceEnCita = false, citaSinRol = false }) {
     const principal = crearPublicacion({ id, boton, retrasoMs });
     principal.articulo.classList.add('xat-hilo');
     const citada = {
@@ -185,7 +185,7 @@
     };
     principal.remontar = () => {
       const marco = document.createElement('div');
-      marco.setAttribute('role', 'link');
+      if (!citaSinRol) marco.setAttribute('role', 'link');
       marco.className = 'xat-cita';
       marco.append(bloque(citada));
       return [bloque(principal), marco];
@@ -298,6 +298,51 @@
     // Manda la pestaña a segundo plano (true) o la trae de vuelta (false); lo ejecuta la bancada.
     ocultarPestania(si) {
       window.__xatOculta = si;
+    },
+    // Espera a que la pestaña esté de verdad en segundo plano (la bancada la mueve).
+    async esperarOculta() {
+      const fin = performance.now() + 5000;
+      while (!document.hidden && performance.now() < fin) await avanzar(20);
+      return document.hidden;
+    },
+    // X recicla un artículo entero para otra publicación: el mismo <article>, con contenido nuevo.
+    reciclarArticulo(id, nuevoId, opciones = {}) {
+      const articulo = publicaciones.get(id).articulo;
+      const pub = {
+        lang: 'en', boton: 'ninguno', retrasoMs: 50, falla: false, quitaControl: false, enlace: true,
+        traduccion: null, traducida: false, traducidaPorX: false, ...opciones, id: nuevoId,
+      };
+      pub.original = opciones.texto ?? `Original ${nuevoId}`;
+      pub.numerico = String(siguienteNumero++);
+      pub.articulo = articulo;
+      articulo.className = 'xat-pub';
+      montarPublicacion(pub);
+      publicaciones.set(nuevoId, pub);
+      porNumero.set(pub.numerico, pub);
+    },
+    // X cambia de sitio el bloque de texto (otro padre); nuestra caja se queda donde estaba.
+    moverBloque(id) {
+      const pub = publicaciones.get(id);
+      const otroPadre = document.createElement('div');
+      pub.articulo.append(otroPadre);
+      otroPadre.append(pub.texto);
+    },
+    // Un segundo bloque de texto colgando del artículo, hermano del post, sin caja ni enlace propios.
+    crearConBloqueHermano(id) {
+      const pub = crearPublicacion({ id, boton: 'ninguno', texto: 'The post itself.' });
+      const hermano = document.createElement('div');
+      hermano.setAttribute('data-testid', 'tweetText');
+      hermano.lang = 'en';
+      hermano.textContent = 'A second block with no box of its own.';
+      pub.texto.after(hermano);
+      return hermano;
+    },
+    // Dos publicaciones acaban resolviendo al mismo enlace permanente.
+    repetirEnlace(id, comoId) {
+      const pub = publicaciones.get(id);
+      const modelo = publicaciones.get(comoId);
+      pub.numerico = modelo.numerico;
+      pub.enlaceEl.href = modelo.enlaceEl.getAttribute('href');
     },
     get visibleAlInicio() {
       const valor = calcularVisibleAlInicio();
@@ -831,12 +876,18 @@
         c.memo.cajaVieja = c.cajaDe('r1');
         c.memo.numeroViejo = c.numero('r1');
         c.reutilizar('r1', 'r9', 'A completely different tweet.');
+        // En cuanto cede el hilo ya han corrido los observadores: ahí no debe quedar nada de la anterior.
+        await new Promise((resolver) => setTimeout(resolver, 0));
+        c.memo.viejaVisible = c.memo.cajaVieja.isConnected;
+        c.memo.originalOculto = !c.originalVisible('r1');
         await c.avanzar(2500);
       },
       comprobar(c) {
         const fallos = [];
+        if (c.memo.viejaVisible) fallos.push('justo tras reutilizar el bloque, la traducción de la publicación anterior seguía en pantalla');
+        if (c.memo.originalOculto) fallos.push('justo tras reutilizar el bloque, el original nuevo estaba oculto');
         if (c.memo.cajaVieja?.isConnected) fallos.push('la traducción de la publicación anterior sigue en el bloque');
-        if (c.traduccionDe('r9') !== 'ES: A completely different tweet.') fallos.push(`la publicación nueva no muestra su traducción («${c.traduccionDe('r9')}»)`);
+        if (c.traduccionDe('r9') !== 'ES: A completely different tweet.') fallos.push(`la publicación nueva no muestra su traducción («${c.traduccionDe('r9')}”)`);
         if (c.originalVisible('r9')) fallos.push('la publicación nueva enseña el original junto a la traducción');
         if (c.peticiones.filter(({ id }) => id === c.memo.numeroViejo).length !== 1) fallos.push('se volvió a pedir la publicación anterior');
         return fallos;
@@ -872,6 +923,8 @@
     // X no encuentra una publicación (404): se deja en paz. A otra le falla Grok: se prueba el servicio clásico.
     falloApi: {
       sesion: true,
+      ajustes: { DIAGNOSTICO_MS: 1500 },
+      avisosEsperados: ['error simulado'],
       api(id, ruta) {
         if (id === ctx.numero('r1')) return { estado: 404 };
         if (id === ctx.numero('r2')) return ruta === 'clasico' ? { latenciaMs: 100 } : { estado: 500 };
@@ -887,8 +940,10 @@
         if (c.cajaDe('r1')) fallos.push('la publicación que X no encuentra recibió una caja');
         if (!c.originalVisible('r1')) fallos.push('el original de r1 no está a la vista');
         if (c.traduccionDe('r2') !== 'ES: Grok is down for this one.') fallos.push(`r2 no está traducida («${c.traduccionDe('r2')}»)`);
-        const rutas = c.peticiones.filter(({ id }) => id === c.numero('r2')).map(({ ruta }) => ruta);
-        if (JSON.stringify(rutas) !== JSON.stringify(['grok', 'clasico'])) fallos.push(`por r2 se pidió ${JSON.stringify(rutas)} y debería ser grok y luego clasico`);
+        const deR1 = c.peticiones.filter(({ id }) => id === c.numero('r1')).map(({ ruta }) => ruta);
+        if (JSON.stringify(deR1) !== JSON.stringify(['grok', 'grok-api', 'clasico'])) fallos.push(`por r1 se pidió ${JSON.stringify(deR1)} y debería ser grok, grok-api y clasico, una vez cada una`);
+        const deR2 = c.peticiones.filter(({ id }) => id === c.numero('r2')).map(({ ruta }) => ruta);
+        if (JSON.stringify(deR2) !== JSON.stringify(['grok', 'clasico'])) fallos.push(`por r2 se pidió ${JSON.stringify(deR2)} y debería ser grok y luego clasico`);
         return fallos;
       },
     },
@@ -986,14 +1041,14 @@
       async ejecutar(c) {
         c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'Only the old service works.' });
         c.crearPublicacion({ id: 'r2', boton: 'ninguno', texto: 'Same here.' });
-        await c.avanzar(3500);
+        await c.avanzar(4000);
       },
       comprobar(c) {
         const fallos = [];
         for (const [id, texto] of [['r1', 'Only the old service works.'], ['r2', 'Same here.']]) {
           if (c.traduccionDe(id) !== `ES: ${texto}`) fallos.push(`${id} no está traducida («${c.traduccionDe(id)}”)`);
           const rutas = c.peticiones.filter(({ id: x }) => x === c.numero(id)).map(({ ruta }) => ruta);
-          if (!rutas.includes('clasico')) fallos.push(`por ${id} no se pidió la ruta clásica (${JSON.stringify(rutas)})`);
+          if (JSON.stringify(rutas) !== JSON.stringify(['grok', 'grok-api', 'clasico'])) fallos.push(`por ${id} se pidió ${JSON.stringify(rutas)} y debería ser grok, grok-api y luego clasico`);
         }
         return fallos;
       },
@@ -1092,13 +1147,18 @@
         c.memo.ocultoAntes = !c.originalVisible('r1');
         c.borrarCaja('r1');
         await c.avanzar(700);
+        c.memo.trasBorrar = { visible: c.originalVisible('r1'), traduccion: c.traduccionDe('r1'), pedidas: c.peticiones.length };
+        c.redibujar('r1'); // X redibuja el artículo: la traducción vuelve de la memoria, sin pedirla otra vez
+        await c.avanzar(800);
       },
       comprobar(c) {
         const fallos = [];
         if (!c.memo.ocultoAntes) fallos.push('antes de borrar la caja, el original de r1 ya estaba a la vista: la prueba no prueba nada');
-        if (!c.originalVisible('r1')) fallos.push('X borró la caja y el original de r1 sigue oculto: publicación en blanco');
-        if (c.traduccionDe('r1') !== null) fallos.push('la traducción de r1 sigue a la vista sin caja');
-        if (c.peticiones.length !== 2) fallos.push(`se hicieron ${c.peticiones.length} peticiones y deberían ser 2`);
+        if (!c.memo.trasBorrar.visible) fallos.push('X borró la caja y el original de r1 sigue oculto: publicación en blanco');
+        if (c.memo.trasBorrar.traduccion !== null) fallos.push('la traducción de r1 sigue a la vista sin caja');
+        if (c.memo.trasBorrar.pedidas !== 2) fallos.push(`se hicieron ${c.memo.trasBorrar.pedidas} peticiones y deberían ser 2`);
+        if (c.traduccionDe('r1') !== 'ES: X removes this box.') fallos.push(`tras redibujar, la traducción no volvió desde la memoria («${c.traduccionDe('r1')}”)`);
+        if (c.peticiones.length !== 2) fallos.push(`al volver la traducción se pidió otra vez (${c.peticiones.length} peticiones)`);
         return fallos;
       },
     },
@@ -1128,10 +1188,19 @@
         c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'The slow one.' });
         await c.avanzar(700); // la petición de r1 está en curso (empezó hacia 0,45 s)
         c.reutilizar('r1', 'r9', 'A different tweet took its place.');
-        await c.avanzar(4000);
+        // Mientras llega la respuesta de la publicación vieja se mira cada poco rato: ninguna caja
+        // ajena puede asomar bajo la publicación nueva, ni por un instante.
+        c.memo.cajaAjena = false;
+        for (let i = 0; i < 60; i++) {
+          await c.avanzar(25);
+          const caja = c.cajaDe('r9');
+          if (caja && caja.getAttribute('data-xat-id') !== c.numero('r9')) c.memo.cajaAjena = true;
+        }
+        await c.avanzar(2500);
       },
       comprobar(c) {
         const fallos = [];
+        if (c.memo.cajaAjena) fallos.push('la traducción de la publicación vieja se llegó a ver bajo la publicación nueva');
         if (c.traduccionDe('r9') !== 'ES: A different tweet took its place.') fallos.push(`el bloque reutilizado no muestra su propia traducción («${c.traduccionDe('r9')}”)`);
         if (c.cajaDe('r9')?.getAttribute('data-xat-id') !== c.numero('r9')) fallos.push('la caja del bloque reutilizado lleva otro identificador');
         if (c.originalVisible('r9')) fallos.push('el bloque reutilizado enseña el original junto a la traducción');
@@ -1204,19 +1273,21 @@
     // Con la pestaña en segundo plano no se pide nada; al volver, sigue.
     pestaniaOculta: {
       sesion: true,
+      ajustes: { PARADA_MS: 1500 },
       api: { latenciaMs: 100 },
       async ejecutar(c) {
         c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'Hidden tab, no requests.' });
         c.crearPublicacion({ id: 'r2', boton: 'ninguno', texto: 'Back to the tab.' });
-        await c.avanzar(300);
         c.ocultarPestania(true);
-        await c.avanzar(1500);
+        c.memo.oculta = await c.esperarOculta(); // la pestaña está oculta mucho antes de que venza la parada
+        await c.avanzar(1800);
         c.memo.pedidasOculto = c.peticiones.length;
         c.ocultarPestania(false);
         await c.avanzar(3000);
       },
       comprobar(c) {
         const fallos = [];
+        if (!c.memo.oculta) fallos.push('la pestaña no llegó a quedar en segundo plano: la prueba no prueba nada');
         if (c.memo.pedidasOculto !== 0) fallos.push(`con la pestaña oculta se hicieron ${c.memo.pedidasOculto} peticiones`);
         for (const [id, texto] of [['r1', 'Hidden tab, no requests.'], ['r2', 'Back to the tab.']]) {
           if (c.traduccionDe(id) !== `ES: ${texto}`) fallos.push(`al volver a la pestaña, ${id} no está traducida («${c.traduccionDe(id)}”)`);
@@ -1246,6 +1317,373 @@
       },
     },
 
+    // Lo que estaba en cola y salió de pantalla antes de su turno se pide cuando vuelve.
+    saleEnColaApi: {
+      sesion: true,
+      api(id) {
+        return id === ctx.numero('r1') ? { latenciaMs: 2500 } : { latenciaMs: 50 };
+      },
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'The slow first reply.' });
+        c.crearPublicacion({ id: 'r2', boton: 'ninguno', texto: 'Second reply.' });
+        c.crearPublicacion({ id: 'r3', boton: 'ninguno', texto: 'Third reply.' });
+        for (let i = 4; i <= 9; i++) c.crearPublicacion({ id: `r${i}`, boton: 'ninguno', texto: `Reply number ${i}.` });
+        await c.avanzar(800);
+        c.irA('r9'); // r2 y r3 salen de pantalla con la petición de r1 aún en curso
+        await c.avanzar(3500); // …y les llega el turno mientras siguen fuera
+        c.memo.pedidasFuera = c.peticiones.filter(({ id }) => id === c.numero('r2') || id === c.numero('r3')).length;
+        c.irA('r1'); // y vuelven
+        await c.avanzar(4000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        if (c.memo.pedidasFuera !== 0) fallos.push('se pidió algo que estaba fuera de pantalla');
+        for (const [id, texto] of [['r2', 'Second reply.'], ['r3', 'Third reply.']]) {
+          if (c.peticiones.filter(({ id: x }) => x === c.numero(id)).length !== 1) fallos.push(`${id} no recibió exactamente una petición al volver a pantalla`);
+          if (c.traduccionDe(id) !== `ES: ${texto}`) fallos.push(`al volver a pantalla, ${id} no está traducida («${c.traduccionDe(id)}”)`);
+        }
+        return fallos;
+      },
+    },
+
+    // Lo que X no puede traducir no se vuelve a pedir, por muchos redibujados que haya.
+    fallidaTrasRedibujar: {
+      sesion: true,
+      ajustes: { DIAGNOSTICO_MS: 1500 },
+      avisosEsperados: ['fallidas: 1'],
+      api: { estado: 404 },
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'A deleted reply.' });
+        await c.avanzar(2500);
+        for (let i = 0; i < 3; i++) {
+          c.redibujar('r1');
+          await c.avanzar(500);
+        }
+      },
+      comprobar(c) {
+        const fallos = [];
+        const rutas = c.peticiones.filter(({ id }) => id === c.numero('r1')).map(({ ruta }) => ruta);
+        if (JSON.stringify(rutas) !== JSON.stringify(['grok', 'grok-api', 'clasico'])) fallos.push(`por una publicación que X no encuentra se pidió ${JSON.stringify(rutas)} y debería ser una vez cada ruta y nada más`);
+        if (c.cajaDe('r1') || !c.originalVisible('r1')) fallos.push('la publicación fallida no quedó como estaba');
+        return fallos;
+      },
+    },
+
+    // X redibuja el bloque de una publicación mientras se pide su traducción: una sola petición.
+    mismaEnVuelo: {
+      sesion: true,
+      api: { latenciaMs: 1000 },
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'Slow reply, redrawn meanwhile.' });
+        await c.avanzar(700); // la petición de r1 está en curso
+        c.redibujar('r1');
+        await c.avanzar(3000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        if (c.peticiones.length !== 1) fallos.push(`se hicieron ${c.peticiones.length} peticiones de la misma publicación y debería ser una`);
+        if (c.traduccionDe('r1') !== 'ES: Slow reply, redrawn meanwhile.') fallos.push(`tras redibujar, la publicación no está traducida («${c.traduccionDe('r1')}”)`);
+        return fallos;
+      },
+    },
+
+    // Dos bloques del mismo artículo resuelven al mismo identificador: solo se trata el primero.
+    mismoIdentificador: {
+      sesion: true,
+      api: { latenciaMs: 100 },
+      async ejecutar(c) {
+        c.crearHilo({ id: 'h1', cita: 'q1', boton: 'ninguno' });
+        c.repetirEnlace('q1', 'h1');
+        await c.avanzar(3000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        if (c.peticiones.length !== 1) fallos.push(`por un identificador repetido se hicieron ${c.peticiones.length} peticiones y debería ser una: solo se trata el primer bloque`);
+        if (c.traduccionDe('h1') !== 'ES: Original h1') fallos.push('el primer bloque no está traducido');
+        if (c.cajaDe('q1')) fallos.push('el segundo bloque recibió una caja');
+        return fallos;
+      },
+    },
+
+    // Tres fallos seguidos por límite (429) también hacen la pausa de tres fallos.
+    pausaTresFallosApi: {
+      sesion: true,
+      ajustes: { PAUSA_MS: 2500 },
+      api: (() => {
+        let quedan = 3; // los tres primeros intentos se topan con el límite de X
+        return () => (quedan-- > 0 ? { estado: 429, cabeceras: { 'retry-after': '1' } } : { latenciaMs: 50 });
+      })(),
+      async ejecutar(c) {
+        for (let i = 1; i <= 3; i++) c.crearPublicacion({ id: `r${i}`, boton: 'ninguno', texto: `Reply number ${i}.` });
+        await c.avanzar(9000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        const tercera = c.peticiones[2];
+        const cuarta = c.peticiones[3];
+        if (!cuarta) fallos.push('no hubo suficientes peticiones para comprobar la pausa');
+        else if (cuarta.inicio - tercera.fin < 2400) fallos.push(`tras tres fallos seguidos por límite, la petición siguiente tardó ${cuarta.inicio - tercera.fin} ms y la pausa debe ser de 2500 ms`);
+        for (let i = 1; i <= 3; i++) if (c.traduccionDe(`r${i}`) !== `ES: Reply number ${i}.`) fallos.push(`r${i} se quedó sin traducir («${c.traduccionDe(`r${i}`)}”)`);
+        return fallos;
+      },
+    },
+
+    // X no traduce nada (dos pausas seguidas sin ningún éxito): no se insiste hasta recargar.
+    disyuntor: {
+      sesion: true,
+      ajustes: { PAUSA_MS: 500 },
+      avisosEsperados: ['sin ningún éxito'],
+      api: { estado: 404 },
+      async ejecutar(c) {
+        for (let i = 1; i <= 9; i++) c.crearPublicacion({ id: `r${i}`, boton: 'ninguno', texto: `Reply number ${i}.` });
+        await c.avanzar(2500); // r1–r3 fallan y llega la primera pausa
+        c.irA('r5'); // r4–r6 entran en pantalla
+        await c.avanzar(3000); // fallan y llega la segunda pausa: paro
+        c.irA('r8'); // r7–r9 entran en pantalla
+        await c.avanzar(3000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        const pedidas = new Set(c.peticiones.map(({ id }) => id));
+        for (const id of ['r7', 'r8', 'r9']) if (pedidas.has(c.numero(id))) fallos.push(`${id} se pidió después de dos pausas seguidas sin ningún éxito`);
+        for (let i = 1; i <= 9; i++) if (!c.originalVisible(`r${i}`) || c.cajaDe(`r${i}`)) fallos.push(`r${i} no quedó como estaba`);
+        return fallos;
+      },
+    },
+
+    // Un texto parado por el tope no bloquea los clics que tenga detrás en la cola.
+    mixtoClicYPeticion: {
+      sesion: true,
+      ajustes: { TOPE_PAGINA: 1 },
+      api: { latenciaMs: 50 },
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'First, by request.' });
+        c.crearPublicacion({ id: 'r2', boton: 'ninguno', texto: 'Second, parked by the cap.' });
+        c.crearPublicacion({ id: 'r3', texto: 'Third, with the button of X.' }); // botón de X: camino del clic
+        await c.avanzar(3500);
+      },
+      comprobar(c) {
+        const fallos = [];
+        if (c.traduccionDe('r1') !== 'ES: First, by request.') fallos.push(`r1 no está traducida («${c.traduccionDe('r1')}”)`);
+        if (c.peticiones.length !== 1 || c.peticiones[0].id !== c.numero('r1')) fallos.push('se hizo alguna petición por encima del tope de página');
+        if (c.cajaDe('r2') || !c.originalVisible('r2')) fallos.push('r2 no quedó como estaba');
+        if (c.clics.filter(({ id }) => id === 'r3').length !== 1) fallos.push('el botón de X de r3 no recibió su clic: el texto parado por el tope lo bloqueó');
+        if (c.texto('r3') !== 'ES: Third, with the button of X.') fallos.push('r3 no está traducida');
+        return fallos;
+      },
+    },
+
+    // La caja de la cita no lleva role="link": se reconoce por la estructura.
+    citaSinRol: {
+      sesion: true,
+      api: { latenciaMs: 100 },
+      async ejecutar(c) {
+        c.crearHilo({ id: 'h1', cita: 'q1', boton: 'ninguno', citaSinRol: true });
+        await c.avanzar(3000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        const pedidas = c.peticiones.map(({ id }) => id);
+        if (JSON.stringify(pedidas) !== JSON.stringify([c.numero('h1'), c.numero('q1')])) fallos.push(`sin role="link" en la caja de la cita se pidió ${JSON.stringify(pedidas)} y debería ser h1 y luego q1, cada una por su enlace`);
+        for (const id of ['h1', 'q1']) if (c.traduccionDe(id) !== `ES: Original ${id}`) fallos.push(`${id} no está traducida («${c.traduccionDe(id)}”)`);
+        return fallos;
+      },
+    },
+
+    // Y si la cita no tiene ni caja reconocible ni enlace propio, no se pide nunca con el del post.
+    citaSinRolNiEnlace: {
+      sesion: true,
+      api: { latenciaMs: 100 },
+      async ejecutar(c) {
+        c.crearHilo({ id: 'h1', cita: 'q1', boton: 'ninguno', citaSinRol: true, sinEnlaceEnCita: true });
+        await c.avanzar(3000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        const pedidas = c.peticiones.map(({ id }) => id);
+        if (pedidas.length !== 1 || pedidas[0] !== c.numero('h1')) fallos.push(`una cita sin caja reconocible ni enlace se pidió ${JSON.stringify(pedidas)} y no debería pedirse nunca con el identificador del post`);
+        if (c.cajaDe('q1') || !c.originalVisible('q1')) fallos.push('la cita sin enlace no quedó como estaba');
+        return fallos;
+      },
+    },
+
+    // X recicla un artículo que tuvo botón para una publicación que no lo tiene: pasa a pedir.
+    articuloReciclado: {
+      sesion: true,
+      api: { latenciaMs: 50 },
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'r1', texto: 'Had the button of X.' }); // camino del clic
+        c.crearPublicacion({ id: 'r2', boton: 'ninguno', texto: 'Plain reply.' });
+        await c.avanzar(2000);
+        c.reciclarArticulo('r1', 'n1', { boton: 'ninguno', texto: 'Recycled for a reply without button.' });
+        await c.avanzar(3000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        if (c.traduccionDe('n1') !== 'ES: Recycled for a reply without button.') fallos.push(`el artículo reciclado no pasó al camino de petición («${c.traduccionDe('n1')}”)`);
+        if (c.originalVisible('n1')) fallos.push('el original del artículo reciclado está a la vista junto a la traducción');
+        if (c.peticiones.filter(({ id }) => id === c.numero('n1')).length !== 1) fallos.push('la publicación reciclada no recibió exactamente una petición');
+        return fallos;
+      },
+    },
+
+    // Y lo mismo al revés: la vuelta al original de una publicación no tapa a la que llega después.
+    revertidoReciclado: {
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'r1', texto: 'First post here.' });
+        c.crearPublicacion({ id: 'r2', texto: 'Another post.' });
+        await c.avanzar(1200);
+        c.pulsarOriginal('r1');
+        c.reciclarArticulo('r1', 'n1', { boton: 'texto', texto: 'A different post took the article.' });
+        await c.avanzar(2500);
+      },
+      comprobar(c) {
+        const fallos = [];
+        if (c.clics.filter(({ id }) => id === 'n1').length !== 1) fallos.push('el botón de X de la publicación nueva no se pulsó: la marca de «vuelta al original» del artículo viejo la tapó');
+        if (c.texto('n1') !== 'ES: A different post took the article.') fallos.push('la publicación nueva no está traducida');
+        return fallos;
+      },
+    },
+
+    // Se cae la red: un reintento y se deja en paz; las demás siguen.
+    sinRed: {
+      sesion: true,
+      ajustes: { REINTENTO_MS: 800, DIAGNOSTICO_MS: 500 },
+      avisosEsperados: ['error de red'],
+      api(id) {
+        return id === ctx.numero('r1') ? { red: true } : { latenciaMs: 50 };
+      },
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'The network drops this one.' });
+        c.crearPublicacion({ id: 'r2', boton: 'ninguno', texto: 'The network is fine here.' });
+        await c.avanzar(5000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        const deR1 = c.peticiones.filter(({ id }) => id === c.numero('r1'));
+        if (deR1.length !== 4) fallos.push(`r1 recibió ${deR1.length} peticiones y debería recibir 4 (dos rutas, dos intentos)`);
+        if (deR1.length === 4 && deR1[2].inicio - deR1[1].fin < 700) fallos.push(`el reintento no esperó: llegó ${deR1[2].inicio - deR1[1].fin} ms después del primer intento y debe esperar unos 800 ms`);
+        if (c.cajaDe('r1') || !c.originalVisible('r1')) fallos.push('la publicación sin red no quedó como estaba');
+        if (c.traduccionDe('r2') !== 'ES: The network is fine here.') fallos.push(`r2 no está traducida («${c.traduccionDe('r2')}”)`);
+        return fallos;
+      },
+    },
+
+    // X no contesta nunca: la petición se corta al tope de tiempo. El tope es por publicación, no
+    // por ruta: agotado, no se prueba la siguiente.
+    topeDeTiempo: {
+      sesion: true,
+      ajustes: { PETICION_MAX_MS: 300, REINTENTO_MS: 500 },
+      api: { latenciaMs: 5000 },
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'X takes forever here.' });
+        await c.avanzar(3000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        if (c.peticiones.some(({ abortada }) => !abortada)) fallos.push('alguna petición no se cortó al llegar al tope de tiempo');
+        if (c.peticiones.some(({ inicio, fin }) => fin - inicio > 450)) fallos.push('alguna petición tardó más del tope de tiempo');
+        if (c.peticiones.length !== 2) fallos.push(`se hicieron ${c.peticiones.length} peticiones y deberían ser 2: una por intento, porque el tope de tiempo es por publicación y no por ruta`);
+        if (c.cajaDe('r1') || !c.originalVisible('r1')) fallos.push('la publicación que X no contesta no quedó como estaba');
+        return fallos;
+      },
+    },
+
+    // Lo que no es una traducción no se pinta; lo que llega cifrado, se descifra.
+    formatosRaros: {
+      sesion: true,
+      api(id, ruta) {
+        if (ruta !== 'grok') return { estado: 500 };
+        if (id === ctx.numero('meta')) return { cuerpo: JSON.stringify({ result: { text: 'Please provide the text to translate.' } }) };
+        return { cuerpo: `data:${btoa(JSON.stringify({ result: { text: 'ES: Wrapped in base64.' } }))}` };
+      },
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'meta', boton: 'ninguno', texto: 'A reply the model did not translate.' });
+        c.crearPublicacion({ id: 'cifrada', boton: 'ninguno', texto: 'Wrapped in base64.' });
+        await c.avanzar(3500);
+      },
+      comprobar(c) {
+        const fallos = [];
+        if (c.cajaDe('meta') || !c.originalVisible('meta')) fallos.push('la respuesta que no es una traducción se pintó como si lo fuera');
+        if (c.traduccionDe('cifrada') !== 'ES: Wrapped in base64.') fallos.push(`la respuesta cifrada no se descifró («${c.traduccionDe('cifrada')}”)`);
+        return fallos;
+      },
+    },
+
+    // X usa «xx» para «inglés por defecto»: no es un idioma al que pedir.
+    idiomaXX: {
+      sesion: true,
+      idioma: 'xx',
+      api: { latenciaMs: 50 },
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'Interface language is not a code.' });
+        await c.avanzar(2000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        let pedido = {};
+        try { pedido = JSON.parse(c.peticiones[0]?.cuerpo ?? 'null') ?? {}; } catch { /* sin cuerpo */ }
+        if (pedido.dst_lang !== 'es') fallos.push(`se pidió traducir a «${pedido.dst_lang}» y debería ser «es» (el de <html lang>)`);
+        if (c.peticiones[0]?.cabeceras['x-twitter-client-language'] !== 'es') fallos.push('la cabecera de idioma no es «es»');
+        return fallos;
+      },
+    },
+
+    // X cambia de sitio el bloque de texto: la caja va con él.
+    cajaLejos: {
+      sesion: true,
+      api: { latenciaMs: 50 },
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'X moves this block elsewhere.' });
+        c.crearPublicacion({ id: 'r2', boton: 'ninguno', texto: 'This one does not move.' });
+        await c.avanzar(2000);
+        c.moverBloque('r1');
+        await c.avanzar(800);
+      },
+      comprobar(c) {
+        const fallos = [];
+        if (c.traduccionDe('r1') !== 'ES: X moves this block elsewhere.') fallos.push(`tras cambiar de sitio el bloque, su traducción no está delante («${c.traduccionDe('r1')}”)`);
+        if (c.originalVisible('r1')) fallos.push('tras cambiar de sitio el bloque, se ve el original junto a la traducción');
+        return fallos;
+      },
+    },
+    // Un segundo bloque sin caja ni enlace propios no se pide nunca con el identificador del post.
+    bloqueHermanoSinEnlace: {
+      sesion: true,
+      ajustes: { DIAGNOSTICO_MS: 1500 },
+      avisosEsperados: ['sin enlace permanente: 1'],
+      api: { latenciaMs: 50 },
+      async ejecutar(c) {
+        c.crearConBloqueHermano('r1');
+        await c.avanzar(2500);
+      },
+      comprobar(c) {
+        const fallos = [];
+        const pedidas = c.peticiones.map(({ id }) => id);
+        if (pedidas.length !== 1 || pedidas[0] !== c.numero('r1')) fallos.push(`se pidió ${JSON.stringify(pedidas)} y debería ser solo el post, una vez`);
+        if (c.traduccionDe('r1') !== 'ES: The post itself.') fallos.push('el post no está traducido');
+        return fallos;
+      },
+    },
+
+    // El reintento espera su tiempo, no sale en el siguiente hueco.
+    reintentoEspera: {
+      sesion: true,
+      ajustes: { REINTENTO_MS: 1500, DIAGNOSTICO_MS: 500 },
+      api: { red: true },
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'The network is down.' });
+        await c.avanzar(4000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        const p = c.peticiones;
+        if (p.length !== 4) fallos.push(`se hicieron ${p.length} peticiones y deberían ser 4 (dos rutas, dos intentos)`);
+        else if (p[2].inicio - p[1].fin < 1400) fallos.push(`el reintento no esperó: llegó ${p[2].inicio - p[1].fin} ms después del primer intento y debe esperar unos 1500 ms`);
+        return fallos;
+      },
+    },
+
     // X redibuja el hilo al traducir su post principal: la cita, con botón nuevo, también se traduce.
     redisado: {
       async ejecutar(c) {
@@ -1264,7 +1702,44 @@
     },
   });
 
-  // ---- Arranque --------------------------------------------------------------------
+
+  // Tras un 429 se espera lo que diga X, venga en segundos, en fecha HTTP o en la hora de
+  // reseteo; si no dice nada, el tiempo de pausa; y nunca más de 15 minutos.
+  // [sufijo del escenario, cabeceras del primer 429, espera mínima hasta la 2.ª petición, cuánto esperar]
+  const CASOS_429 = [
+    ['Segundos', () => ({ 'retry-after': '2' }), 1900, 6500],
+    ['FechaHttp', () => ({ 'retry-after': new Date(Date.now() + 3000).toUTCString() }), 1800, 7500],
+    ['Reseteo', () => ({ 'x-rate-limit-reset': String(Math.floor(Date.now() / 1000) + 3) }), 1800, 7500],
+    ['SinCabeceras', () => ({}), 1400, 5000],
+    ['Tope', () => ({ 'retry-after': '3600' }), 2900, 3200],
+  ];
+  for (const [sufijo, cabeceras, minimo, espera] of CASOS_429) {
+    escenarios[`espera429${sufijo}`] = {
+      sesion: true,
+      ajustes: { PAUSA_MS: 1500 },
+      api: (() => {
+        let primera = true;
+        return () => (primera ? ((primera = false), { estado: 429, cabeceras: cabeceras() }) : { latenciaMs: 50 });
+      })(),
+      async ejecutar(c) {
+        c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'Limited once.' });
+        c.crearPublicacion({ id: 'r2', boton: 'ninguno', texto: 'Never limited.' });
+        await c.avanzar(espera);
+      },
+      comprobar(c) {
+        const fallos = [];
+        const [primera, segunda] = c.peticiones;
+        if (!segunda) {
+          if (minimo < 2900) fallos.push('no hubo segunda petición');
+        } else if (segunda.inicio - primera.fin < minimo) {
+          fallos.push(`tras el 429 la petición siguiente tardó ${segunda.inicio - primera.fin} ms y debe esperar al menos ${minimo} ms`);
+        }
+        return fallos;
+      },
+    };
+  }
+
+  // ---- Arranque----------------------------------------------------------------
 
   const definicion = escenarios[NOMBRE];
   // Los ajustes del escenario deben estar antes de que cargue la extensión.
@@ -1281,7 +1756,7 @@
   document.cookie = 'lang=; max-age=0; path=/';
   if (definicion?.sesion) {
     document.cookie = 'ct0=prueba-csrf; path=/';
-    document.cookie = 'lang=es; path=/';
+    document.cookie = `lang=${definicion.idioma ?? 'es'}; path=/`;
   }
 
   // Servicio de traducción de X: sustituye a window.fetch para sus rutas y deja pasar el resto.
@@ -1298,11 +1773,25 @@
     if (!grok && !clasico) return fetchDeVerdad(recurso, init);
     const id = grok ? JSON.parse(init.body).id : url.match(/tweetId=(\d+)/)?.[1];
     const ruta = grok ? (url.startsWith('https://api.x.com/') ? 'grok-api' : 'grok') : 'clasico';
-    const peticion = { id, ruta, cabeceras: { ...(init.headers ?? {}) }, inicio: Math.round(performance.now() - t0) };
+    const peticion = { id, ruta, cuerpo: init.body ?? null, cabeceras: { ...(init.headers ?? {}) }, inicio: Math.round(performance.now() - t0) };
     peticiones.push(peticion);
     const regla = reglasDe(id, ruta);
-    await avanzar(regla.latenciaMs ?? 100);
-    peticion.fin = Math.round(performance.now() - t0);
+    // Como el fetch de verdad: la red puede fallar, y la señal de aborto corta la espera.
+    const fin = () => { peticion.fin = Math.round(performance.now() - t0); };
+    if (regla.red) {
+      await avanzar(5);
+      fin();
+      throw new TypeError('Failed to fetch');
+    }
+    const abortada = await new Promise((resolver) => {
+      const temporizador = setTimeout(() => resolver(false), regla.latenciaMs ?? 100);
+      init.signal?.addEventListener('abort', () => { clearTimeout(temporizador); resolver(true); }, { once: true });
+    });
+    fin();
+    if (abortada) {
+      peticion.abortada = true;
+      throw new DOMException('The user aborted a request.', 'AbortError');
+    }
     if (regla.estado && regla.estado !== 200) {
       const cuerpo = regla.cuerpo ?? JSON.stringify({ errors: [{ code: regla.estado, message: regla.mensaje ?? 'error simulado' }] });
       return new Response(cuerpo, { status: regla.estado, headers: regla.cabeceras ?? {} });

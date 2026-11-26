@@ -56,7 +56,7 @@
     FALLOS_PARA_PAUSA: 3,
     DIAGNOSTICO_MS: 5000,  // cuándo escribir el diagnóstico
     REEXAMEN_MS: 150,      // pausa antes de volver a examinar los artículos con nodos nuevos
-    PETICION_MAX_MS: 20000, // tiempo máximo de una petición de traducción a X
+    PETICION_MAX_MS: 20000, // tiempo máximo de las peticiones de una publicación, todas sus rutas juntas
     ...AJUSTES,
   });
 
@@ -73,30 +73,37 @@
   // Camino del clic. Estado de cada botón: 'visto' (observado, sin cumplir todavía la parada),
   // 'enCola', 'pendiente' (pulsado, a la espera de X o de un reintento) o 'descartado'.
   const estado = new WeakMap();
-  const articulosConBoton = new WeakSet(); // <article> con botón «Traducir publicación» de X
+  // X recicla artículos, así que las marcas por artículo recuerdan a qué publicación pertenecen.
+  const articulosConBoton = new WeakMap(); // <article> → publicación que había al aparecer su botón
+  const revertidos = new WeakMap();        // <article> → publicación que el Socio devolvió al original
   const pendientes = new Map();     // botón → momento del último clic, a la espera de X
   const intentos = new WeakMap();   // botón → clics que ha recibido
-  const revertidos = new WeakSet(); // <article> donde el Socio pulsó el «Mostrar original» de X
 
-  // Camino de petición. Estado de cada bloque de texto: 'visto', 'enCola', 'pedido', 'hecho'
-  // (traducción puesta) o 'descartado' (no se vuelve a pedir).
-  const textos = new WeakMap();
-  const cajas = new WeakMap();      // bloque → nuestra caja
-  const duenoDe = new WeakMap();    // caja → bloque
+  // Camino de petición. Lo que se sabe de cada publicación, por su identificador: así no depende
+  // del bloque que la pinta, que X crea, redibuja y reutiliza.
   const memoria = new Map();        // identificador → traducción que X ya contestó
-  const devueltas = new Set();      // identificadores que el Socio devolvió al original
-  const pedidas = new Set();        // publicaciones ya pedidas (para no contar dos veces)
   const fallidas = new Set();       // publicaciones que X no pudo traducir y se dejaron en paz
+  const devueltas = new Set();      // publicaciones que el Socio devolvió al original
+  const enCola = new Set();         // publicaciones con una tarea en cola: una sola por publicación
+  const pedidas = new Set();        // publicaciones ya pedidas (para no contar dos veces)
   const pedidasPorHora = [];        // momentos de la primera petición de cada publicación
   let pedidasEnPagina = 0;
   let peticionEnVuelo = false;
   let paroPorPermiso = false;       // X rechazó las peticiones: nada más hasta recargar
+  let paroPorFallos = false;        // X no traduce nada: nada más hasta recargar
+  let pausasSinExito = 0;
+
+  // …y por dónde va cada bloque de texto: 'visto', 'enCola', 'pedido', 'hecho' (traducción
+  // puesta) o 'descartado' (no se vuelve a pedir).
+  const textos = new WeakMap();
+  const cajas = new WeakMap();      // bloque → nuestra caja
+  const duenoDe = new WeakMap();    // caja → bloque
 
   const observados = new Set();     // botones y bloques que sigue mirando el IntersectionObserver
   const paradas = new Map();        // elemento → temporizador de la parada
   const cajasVivas = new Set();     // nuestras cajas que están en el documento
   const sucios = new Set();         // <article> con nodos nuevos desde el último examen
-  const cola = [];                  // { tipo: 'clic', boton } | { tipo: 'texto', nodo, id, intentos }
+  const cola = [];                  // { tipo: 'clic', boton } | { tipo: 'texto', nodo, id, intentos, noAntes }
   const avisados = new Set();
   let huecoHasta = -Infinity; // tras cada clic o petición no se hace nada hasta que pasa el hueco
   let pausadoHasta = 0;       // la cola no trabaja hasta este momento
@@ -121,43 +128,87 @@
 
   function cookie(nombre) {
     const hallado = document.cookie.match(new RegExp(`(?:^|; )${nombre}=([^;]*)`));
-    return hallado ? decodeURIComponent(hallado[1]) : '';
+    if (!hallado) return '';
+    try {
+      return decodeURIComponent(hallado[1]);
+    } catch {
+      return hallado[1]; // una cookie mal formada no debe tumbar la extensión
+    }
   }
-  const haySesion = () => !!cookie('ct0');
 
-  // Idioma base de la interfaz de X: la cookie `lang`, si es un código válido; si no, el de
-  // <html lang>; y si no, español. (X usa `xx` para «inglés por defecto».)
-  function idiomaDestino() {
-    const deLaCookie = baseDelIdioma(cookie('lang'));
-    const delHtml = baseDelIdioma(document.documentElement.lang);
-    return (VALIDO_IDIOMA.test(deLaCookie) && deLaCookie) || (VALIDO_IDIOMA.test(delHtml) && delHtml) || 'es';
+  // La sesión y el idioma de la interfaz casi nunca cambian: se leen una vez por segundo.
+  // Las cabeceras de cada petición leen la cookie fresca, no la copia.
+  let cacheSesion = null;
+  function haySesion() {
+    const ahora = performance.now();
+    if (!cacheSesion || cacheSesion.hasta <= ahora) cacheSesion = { hasta: ahora + 1000, hay: !!cookie('ct0') };
+    return cacheSesion.hay;
   }
-  const VALIDO_IDIOMA = /^[a-z]{2,3}$/;
+
+  const VALIDO_IDIOMA = /^(?!xx$)[a-z]{2,3}$/; // X usa «xx» para «inglés por defecto»: no es un idioma
   const baseDelIdioma = (texto) => (texto ?? '').trim().toLowerCase().split('-')[0];
 
-  // La caja de cita de un bloque: el ancestro role="link" más cercano dentro del artículo.
+  // Idioma base de la interfaz de X: la cookie `lang`, si es un código válido; si no, el de
+  // <html lang>; y si no, español.
+  let cacheIdioma = null;
+  function idiomaDestino() {
+    const ahora = performance.now();
+    if (!cacheIdioma || cacheIdioma.hasta <= ahora) {
+      const deLaCookie = baseDelIdioma(cookie('lang'));
+      const delHtml = baseDelIdioma(document.documentElement.lang);
+      cacheIdioma = {
+        hasta: ahora + 1000,
+        idioma: (VALIDO_IDIOMA.test(deLaCookie) && deLaCookie) || (VALIDO_IDIOMA.test(delHtml) && delHtml) || 'es',
+      };
+    }
+    return cacheIdioma.idioma;
+  }
+
+  // Bloques de texto de un artículo, en orden. El primero es el post; los demás son citas o
+  // tarjetas dentro de él.
+  const bloquesDe = (articulo) => [...articulo.querySelectorAll('[data-testid="tweetText"]')];
+
+  // La caja propia de un bloque que no es el post: el ancestro más cercano, dentro del artículo,
+  // que no contiene al post. No hace falta que lleve role="link".
   function cajaDeCitaDe(nodo) {
     const articulo = nodo.closest('article');
-    const caja = nodo.parentElement?.closest('[role="link"]');
-    return articulo && caja && articulo.contains(caja) ? caja : null;
+    if (!articulo) return null;
+    const primero = bloquesDe(articulo)[0];
+    if (!primero || nodo === primero) return null;
+    let caja = nodo.parentElement;
+    while (caja && caja !== articulo && caja.contains(primero)) caja = caja.parentElement;
+    return caja && caja !== articulo ? caja : null;
   }
 
   const identificadorEn = (enlace) => enlace?.getAttribute('href')?.match(/\/status\/(\d+)/)?.[1] ?? '';
 
-  // Identificador de la publicación de un bloque, por su enlace permanente.
-  // Una cita solo se identifica por un enlace de su propia caja: nunca por el del post que la
-  // contiene. El post, por su enlace con `time` fuera de las cajas de cita.
+  // Enlaces permanentes de `raiz`: los que envuelven un <time>.
+  const enlacesPermanentesEn = (raiz) => [...raiz.querySelectorAll('a[href*="/status/"]')]
+    .filter((enlace) => enlace.querySelector('time'));
+
+  // Identificador de la publicación de un bloque, por su enlace permanente. A prueba de fallo:
+  // si no hay manera segura de saberlo, no hay identificador y no se pide.
+  //  · Una cita solo se identifica por un enlace de su propia caja: nunca por el del post.
+  //  · El post, por su enlace con `time` fuera de las cajas de sus citas.
   function idDe(nodo) {
     const articulo = nodo.closest('article');
     if (!articulo) return '';
-    const caja = cajaDeCitaDe(nodo);
-    if (caja) {
-      const enlaces = [...caja.querySelectorAll('a[href*="/status/"]')];
-      return identificadorEn(enlaces.find((enlace) => enlace.querySelector('time')) ?? enlaces[0]);
+    const bloques = bloquesDe(articulo);
+    const primero = bloques[0];
+    if (!primero) return '';
+    if (nodo !== primero) {
+      const caja = cajaDeCitaDe(nodo);
+      return caja ? identificadorEn(enlacesPermanentesEn(caja)[0]) : '';
     }
-    const enlaces = [...articulo.querySelectorAll('a[href*="/status/"]')].filter((enlace) => !cajaDeCitaDe(enlace));
-    return identificadorEn(enlaces.find((enlace) => enlace.querySelector('time')) ?? enlaces[0]);
+    const cajasDeCitas = bloques.slice(1).map(cajaDeCitaDe).filter(Boolean);
+    const propio = enlacesPermanentesEn(articulo).find((enlace) => !cajasDeCitas.some((caja) => caja.contains(enlace)));
+    return identificadorEn(propio);
   }
+
+  const idDelArticulo = (articulo) => {
+    const bloques = bloquesDe(articulo);
+    return bloques[0] ? idDe(bloques[0]) : '';
+  };
 
   // ¿Viene `control` antes que `nodo` en el documento?
   const vieneAntes = (control, nodo) => (nodo.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_PRECEDING) !== 0;
@@ -168,7 +219,7 @@
   function traducidoPorX(nodo) {
     const articulo = nodo.closest('article');
     if (!articulo) return false;
-    const bloques = [...articulo.querySelectorAll('[data-testid="tweetText"]')];
+    const bloques = bloquesDe(articulo);
     const anterior = bloques[bloques.indexOf(nodo) - 1];
     for (const control of articulo.querySelectorAll('button, [role="button"], span')) {
       if (esNuestro(control) || control.closest('[data-testid="tweetText"]')) continue;
@@ -182,7 +233,7 @@
 
   // El bloque de texto de la publicación de la que cuelga un «Mostrar original» de X.
   function bloqueDespuesDe(control, articulo) {
-    for (const nodo of articulo.querySelectorAll('[data-testid="tweetText"]')) {
+    for (const nodo of bloquesDe(articulo)) {
       if ((control.compareDocumentPosition(nodo) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0) return nodo;
     }
     return null;
@@ -195,7 +246,7 @@
 
   // ¿Se le puede pedir a X la traducción de este bloque?
   function esCandidato(nodo, id) {
-    if (!id || !haySesion() || devueltas.has(id)) return false;
+    if (!id || !haySesion() || devueltas.has(id) || fallidas.has(id)) return false;
     const idioma = baseDelIdioma(nodo.getAttribute('lang'));
     if (idioma === idiomaDestino() || SIN_IDIOMA.has(idioma)) return false;
     if (traducidoPorX(nodo)) return false;
@@ -205,17 +256,30 @@
   // ── Examen de los artículos ────────────────────────────────────────────────────────────
 
   function examinar(article) {
+    // X recicla artículos: las marcas son de la publicación que había cuando se pusieron.
+    const idArticulo = idDelArticulo(article);
+    if (articulosConBoton.has(article) && articulosConBoton.get(article) !== idArticulo) articulosConBoton.delete(article);
+    if (revertidos.has(article) && revertidos.get(article) !== idArticulo) revertidos.delete(article);
     // Camino del clic. Donde el Socio volvió al original no se vuelve a pulsar nada.
     if (!revertidos.has(article)) {
       for (const el of article.querySelectorAll('button, [role="button"]')) {
         if (estado.has(el) || esNuestro(el) || !esBotonTraducir(el)) continue;
         registrarBoton(el);
-        articulosConBoton.add(article);
+        articulosConBoton.set(article, idArticulo);
       }
     }
     // Con botón de X, el artículo entero va por el camino del clic y no se pide nada.
     if (articulosConBoton.has(article)) return;
-    for (const nodo of article.querySelectorAll('[data-testid="tweetText"]')) revisarTexto(nodo);
+    for (const nodo of bloquesDe(article)) revisarTexto(nodo);
+  }
+
+  function examinarSeguro(article) {
+    try {
+      examinar(article);
+    } catch (error) {
+      // Un artículo raro no debe tumbar el examen de los demás.
+      console.warn('[X AutoTranslate] No se pudo examinar un artículo:', error?.message);
+    }
   }
 
   // ── Camino del clic: pulsar el botón de X ──────────────────────────────────────────────
@@ -333,7 +397,7 @@
     observados.add(nodo);
     visibilidad.observe(nodo);
     // Si el bloque ya se estaba observando, el observador no vuelve a avisar: se arranca la
-    // parada aquí mismo (alEntrarTexto ya evita las temporizadores duplicados).
+    // parada aquí mismo (alEntrarTexto ya evita los temporizadores duplicados).
     alEntrarTexto(nodo);
   }
 
@@ -344,16 +408,40 @@
       paradas.delete(nodo);
       const actual = textos.get(nodo);
       if (actual?.estado !== 'visto' || !enPantalla(nodo) || !esCandidato(nodo, actual.id)) return;
-      actual.estado = 'enCola';
-      cola.push({ tipo: 'texto', nodo, id: actual.id, intentos: 0 });
-      bombeo();
+      encolarTexto(nodo);
     }, RITMO.PARADA_MS));
+  }
+
+  // Una sola tarea en cola por publicación. Si ya hay otra, de este bloque se encarga la que
+  // hay: cuando llegue la traducción se pinta en todos los bloques de esa publicación.
+  function encolarTexto(nodo) {
+    const info = textos.get(nodo);
+    if (!info || info.estado !== 'visto' || enCola.has(info.id)) return;
+    info.estado = 'enCola';
+    enCola.add(info.id);
+    cola.push({ tipo: 'texto', nodo, id: info.id, intentos: 0, noAntes: 0 });
+    bombeo();
+  }
+
+  // Una tarea deja la cola sin pedir nada más: la publicación vuelve a estar libre.
+  function soltarTrabajo(trabajo) {
+    enCola.delete(trabajo.id);
+    const info = textos.get(trabajo.nodo);
+    if (info && info.id === trabajo.id && info.estado === 'enCola') info.estado = 'visto';
+    rearmarOtros(trabajo.id, trabajo.nodo);
+  }
+
+  // Si la tarea de una publicación se cae, otro bloque suyo que esté en pantalla toma el relevo.
+  function rearmarOtros(id, excepto) {
+    for (const otro of observados) {
+      const info = textos.get(otro);
+      if (otro !== excepto && info?.id === id && info.estado === 'visto' && !paradas.has(otro)) alEntrarTexto(otro);
+    }
   }
 
   const textoValido = ({ nodo, id }) => {
     const info = textos.get(nodo);
-    return !!info && info.id === id && info.estado === 'enCola' && !cajas.has(nodo)
-      && nodo.isConnected && enPantalla(nodo) && esCandidato(nodo, id);
+    return !!info && info.id === id && nodo.isConnected && enPantalla(nodo) && !cajas.has(nodo) && esCandidato(nodo, id);
   };
 
   // Cuánto hay que esperar para poder volver a pedir a X: 0 si ya se puede, Infinity si hasta
@@ -363,6 +451,11 @@
       avisar('permiso', 'X rechazó las peticiones de traducción (401 o 403 en todas sus rutas). Causas probables: '
         + 'sesión caducada, cuenta sin acceso al servicio, o X cambió la clave pública de su cliente web '
         + '(CLIENTE_PUBLICO_X en content.js). No se pide nada más hasta recargar la página.');
+      return Infinity;
+    }
+    if (paroPorFallos) {
+      avisar('paro-fallos', 'X no está traduciendo nada: dos pausas seguidas por fallos sin ningún éxito. '
+        + 'No se pide nada más hasta recargar la página.');
       return Infinity;
     }
     if (pedidasEnPagina >= TOPE.PAGINA) {
@@ -386,8 +479,9 @@
 
   async function pedirTraduccion(trabajo) {
     const { nodo, id } = trabajo;
+    enCola.delete(id);
     const info = textos.get(nodo);
-    if (info) info.estado = 'pedido';
+    if (info && info.id === id) info.estado = 'pedido';
     peticionEnVuelo = true;
     const empieza = performance.now();
     if (!pedidas.has(id)) {
@@ -406,14 +500,20 @@
     const fin = performance.now();
     peticionEnVuelo = false;
     huecoHasta = fin + sorteo();
-    if (fallo) tratarFallo(trabajo, fallo, fin - empieza);
-    else {
+    if (fallo) {
+      tratarFallo(trabajo, fallo, fin - empieza);
+    } else {
       fallosSeguidos = 0;
+      pausasSinExito = 0;
       if (memoria.size >= TOPE.MEMORIA) memoria.delete(memoria.keys().next().value);
       memoria.set(id, traduccion);
-      // Solo se pinta si el bloque sigue siendo esa misma publicación y sigue sin nada propio.
-      if (nodo.isConnected && idDe(nodo) === id && esCandidato(nodo, id) && !cajas.has(nodo) && !yaPintada(id)) {
-        mostrarTraduccion(nodo, id, traduccion);
+      // Se pinta en su bloque y en cualquier otro de la misma publicación que esté esperando.
+      // Solo si el bloque sigue siendo esa misma publicación y sigue sin nada propio.
+      if (nodo.isConnected && !cajas.has(nodo) && esCandidato(nodo, id)) mostrarTraduccion(nodo, id, traduccion);
+      for (const otro of observados) {
+        if (otro !== nodo && !cajas.has(otro) && textos.get(otro)?.id === id && esCandidato(otro, id)) {
+          mostrarTraduccion(otro, id, traduccion);
+        }
       }
     }
     programar(Math.max(0, huecoHasta - performance.now()));
@@ -429,32 +529,34 @@
     const definitivo = error.permiso || trabajo.intentos >= 2
       || (error.tipo === 'estado' && error.estado >= 400 && error.estado < 500 && error.estado !== 429);
     console.warn(`[X AutoTranslate] X no tradujo la publicación ${id}: ${error.message} (${Math.round(ms)} ms). `
-      + (definitivo ? 'Se deja en paz.' : 'Se reintenta una vez.'));
+      + (definitivo ? 'Se deja en paz.' : 'Se reintenta una vez.')
+      + (error.detalle ? ` Respondió: ${error.detalle}` : ''));
+    const info = textos.get(nodo);
     if (definitivo) {
       fallidas.add(id);
-      const info = textos.get(nodo);
-      if (info) info.estado = 'descartado';
+      if (info && info.id === id) info.estado = 'descartado';
     } else {
-      // Tras un 429 la pausa ya hace de espera; en los demás casos se espera el reintento.
-      setTimeout(() => reencolar(trabajo), error.estado === 429 ? 0 : RITMO.REINTENTO_MS);
+      // La misma tarea vuelve a la cola: tras un 429 la pausa ya hace de espera; en los demás
+      // casos se espera el tiempo de reintento.
+      trabajo.noAntes = error.estado === 429 ? 0 : performance.now() + RITMO.REINTENTO_MS;
+      if (info && info.id === id) info.estado = 'enCola';
+      enCola.add(id);
+      cola.push(trabajo);
+      programar(Math.max(0, trabajo.noAntes - performance.now()));
     }
-    if (fallosSeguidos >= RITMO.FALLOS_PARA_PAUSA && error.estado !== 429) {
+    if (fallosSeguidos >= RITMO.FALLOS_PARA_PAUSA) {
+      // Los 429 también cuentan: son la señal más clara de que X está al límite.
       pausar(RITMO.PAUSA_MS);
       fallosSeguidos = 0;
+      pausasSinExito += 1;
+      // Disyuntor: dos pausas seguidas sin ningún éxito significan que X no traduce nada.
+      if (pausasSinExito >= 2) paroPorFallos = true;
     }
-  }
-
-  function reencolar(trabajo) {
-    const { nodo, id } = trabajo;
-    const info = textos.get(nodo);
-    if (!info || info.id !== id) return;
-    info.estado = 'enCola';
-    cola.push(trabajo);
-    bombeo();
   }
 
   // Una petición cruda a una ruta de traducción de X. Devuelve lo que contestó; no lo interprete.
-  async function abrirRuta(id, ruta) {
+  // Sin señal propia, se corta ella sola al tope de tiempo.
+  async function abrirRuta(id, ruta, señal) {
     const esGrok = ruta !== 'clasico';
     const url = {
       grok: '/i/api/2/grok/translation.json',
@@ -474,7 +576,7 @@
           ? { ...cabecerasDeSesion(), 'content-type': 'text/plain;charset=UTF-8' }
           : cabecerasDeSesion(),
         body: esGrok ? JSON.stringify({ content_type: 'POST', id, dst_lang: idiomaDestino() }) : undefined,
-        signal: controlador.signal,
+        signal: señal ?? controlador.signal,
       });
       const cuerpo = await respuesta.text();
       const cabeceras = {};
@@ -499,42 +601,63 @@
     };
   }
 
+  const describirFallo = (fallo) => ({
+    estado: `HTTP ${fallo.estado}`,
+    red: 'error de red',
+    timeout: 'tiempo agotado',
+    vacia: 'respuesta sin traducción',
+    sinTiempo: 'sin tiempo para probarla',
+  }[fallo.tipo] ?? fallo.tipo);
+
   // Le pide a X la traducción de una publicación. Devuelve el texto o lanza un Error con
-  // `.tipo` ('estado' | 'red' | 'timeout' | 'vacia'), `.estado`, `.esperaMs` y `.permiso`.
+  // `.tipo` ('estado' | 'red' | 'timeout' | 'vacia'), `.estado`, `.esperaMs`, `.permiso` y
+  // `.detalle` (un trozo de lo que respondió).
   async function pedirAX(id) {
     const porProbar = ['grok'];
     const resultados = [];
     let sinPermisoEnTodas = true;
     let ultimo = null;
-    while (porProbar.length) {
-      const ruta = porProbar.shift();
-      const fallo = { ruta, tipo: '', estado: 0, esperaMs: 0, detalle: '' };
-      try {
-        const cruda = await abrirRuta(id, ruta);
-        fallo.estado = cruda.estado;
-        fallo.esperaMs = cruda.estado === 429 ? esperaTrasEl429(cruda) : 0;
-        if (cruda.estado === 200) {
-          const texto = ruta === 'clasico' ? textoClasico(cruda.cuerpo) : textoGrok(cruda.cuerpo);
-          if (texto) return texto;
-          fallo.tipo = 'vacia';
+    // El tope de tiempo vale para toda la publicación, no para cada ruta: agotado, no se sigue.
+    const controlador = new AbortController();
+    const tope = setTimeout(() => controlador.abort(), RITMO.PETICION_MAX_MS);
+    try {
+      while (porProbar.length) {
+        const ruta = porProbar.shift();
+        const fallo = { ruta, tipo: '', estado: 0, esperaMs: 0, detalle: '' };
+        if (controlador.signal.aborted) {
+          fallo.tipo = 'sinTiempo';
         } else {
-          fallo.tipo = 'estado';
-          fallo.detalle = cruda.cuerpo.slice(0, 120).replace(/\s+/g, ' ');
+          try {
+            const cruda = await abrirRuta(id, ruta, controlador.signal);
+            fallo.estado = cruda.estado;
+            fallo.esperaMs = cruda.estado === 429 ? esperaTrasEl429(cruda) : 0;
+            if (cruda.estado === 200) {
+              const texto = ruta === 'clasico' ? textoClasico(cruda.cuerpo) : textoGrok(cruda.cuerpo);
+              if (texto) return texto;
+              fallo.tipo = 'vacia';
+            } else {
+              fallo.tipo = 'estado';
+              fallo.detalle = cruda.cuerpo.slice(0, 120).replace(/\s+/g, ' ');
+            }
+          } catch (error) {
+            fallo.tipo = error.tipo;
+          }
         }
-      } catch (error) {
-        fallo.tipo = error.tipo;
+        resultados.push(`${ruta}: ${describirFallo(fallo)}`);
+        sinPermisoEnTodas &&= fallo.estado === 401 || fallo.estado === 403;
+        ultimo = fallo;
+        if (fallo.estado === 429) break; // límite: no se insiste por otra ruta
+        if (ruta === 'grok' && fallo.estado === 404) porProbar.unshift('grok-api'); // la misma ruta en api.x.com
+        if (ruta !== 'clasico' && !porProbar.includes('clasico')) porProbar.push('clasico');
       }
-      resultados.push(`${ruta}: ${fallo.tipo === 'estado' ? `HTTP ${fallo.estado}` : fallo.tipo}`);
-      sinPermisoEnTodas &&= fallo.estado === 401 || fallo.estado === 403;
-      ultimo = fallo;
-      if (fallo.estado === 429) break; // límite: no se insiste por otra ruta
-      if (ruta === 'grok' && fallo.estado === 404) porProbar.unshift('grok-api'); // la misma ruta en api.x.com
-      if (ruta !== 'clasico' && !porProbar.includes('clasico')) porProbar.push('clasico');
+    } finally {
+      clearTimeout(tope);
     }
     const error = new Error(`probadas ${resultados.join(', ')}`);
     error.tipo = ultimo.tipo;
     error.estado = ultimo.estado;
     error.esperaMs = ultimo.esperaMs;
+    error.detalle = ultimo.detalle;
     error.permiso = sinPermisoEnTodas;
     throw error;
   }
@@ -595,12 +718,13 @@
     let nombre = '';
     try {
       nombresDeIdioma ??= new Intl.DisplayNames(['es'], { type: 'language' });
-      nombre = nombresDeIdioma.of(codigo.split('-')[0]) ?? '';
+      nombre = nombresDeIdioma.of(baseDelIdioma(codigo)) ?? '';
     } catch { /* código desconocido */ }
     if (!nombre) return 'Traducido';
     return /^(lengua|idioma)\b/i.test(nombre) ? `Traducido de ${nombre}` : `Traducido del ${nombre}`;
   }
 
+  // Solo se pinta una vez por publicación: el primer bloque de esa publicación.
   function mostrarTraduccion(nodo, id, traduccion) {
     if (cajas.has(nodo) || yaPintada(id)) return;
     const caja = armarCaja(nodo, id, traduccion);
@@ -675,13 +799,15 @@
     nodo.removeAttribute('data-xat-id');
   }
 
-  // Invariante: un bloque oculto sin caja delante no puede existir.
+  // Invariante: un bloque oculto sin su caja delante no puede existir.
   function asegurarCaja(nodo) {
     const caja = cajas.get(nodo);
     if (!caja.isConnected) {
       quitarTraduccion(nodo);
       return;
     }
+    // X cambió de sitio el bloque: la caja va con él.
+    if (caja.previousElementSibling !== nodo) nodo.after(caja);
     const enOriginal = caja.getAttribute('data-xat-vista') === 'original';
     if (enOriginal === nodo.hasAttribute('data-xat')) {
       if (enOriginal) nodo.removeAttribute('data-xat');
@@ -723,26 +849,51 @@
       programar(falta);
       return;
     }
-    while (cola.length) {
-      const trabajo = cola.shift();
+    // Se recorre la cola sin sacarlo todo: lo que espera se queda en su sitio y lo demás sigue.
+    let esperaPeticiones = null; // el techo se calcula una sola vez por pasada
+    let i = 0;
+    while (i < cola.length) {
+      const trabajo = cola[i];
       if (trabajo.tipo === 'clic') {
+        cola.splice(i, 1);
         const btn = trabajo.boton;
-        if (!candidatoValido(btn)) {
-          // Salió de pantalla mientras esperaba: vuelve a empezar si reaparece.
-          if (estado.get(btn) === 'enCola') estado.set(btn, 'visto');
-          continue;
+        if (candidatoValido(btn)) {
+          pulsar(btn);
+          return;
         }
-        pulsar(btn);
-        return;
+        // Salió de pantalla mientras esperaba: vuelve a empezar si reaparece.
+        if (estado.get(btn) === 'enCola') estado.set(btn, 'visto');
+        continue;
       }
-      // Techo y paros: solo miran las peticiones.
-      const espera = esperaParaPedir();
-      if (espera > 0) {
-        cola.unshift(trabajo);
-        if (Number.isFinite(espera)) programar(espera);
-        return;
+      if (trabajo.noAntes > ahora) {
+        programar(trabajo.noAntes - ahora);
+        i += 1;
+        continue;
       }
-      if (!textoValido(trabajo)) continue;
+      if (esperaPeticiones === null) {
+        esperaPeticiones = esperaParaPedir();
+        if (esperaPeticiones > 0 && Number.isFinite(esperaPeticiones)) programar(esperaPeticiones);
+      }
+      if (esperaPeticiones > 0) {
+        // Parado por el techo o por un paro: se queda en la cola y no estorba a los clics.
+        i += 1;
+        continue;
+      }
+      cola.splice(i, 1);
+      if (memoria.has(trabajo.id)) {
+        // Mientras esperaba ya llegó su traducción por otro bloque de la misma publicación.
+        soltarTrabajo(trabajo);
+        const { nodo } = trabajo;
+        if (nodo.isConnected && !cajas.has(nodo) && esCandidato(nodo, trabajo.id)) {
+          mostrarTraduccion(nodo, trabajo.id, memoria.get(trabajo.id));
+        }
+        continue;
+      }
+      // Salió de pantalla, X lo cambió o ya no es candidato: se suelta y vuelve a empezar si reaparece.
+      if (!textoValido(trabajo)) {
+        soltarTrabajo(trabajo);
+        continue;
+      }
       pedirTraduccion(trabajo);
       return;
     }
@@ -783,7 +934,7 @@
     examenPendiente = true;
     setTimeout(() => {
       examenPendiente = false;
-      for (const article of sucios) examinar(article);
+      for (const article of sucios) examinarSeguro(article);
       sucios.clear();
       // Lo que ya no está en la página deja de ocupar al observador.
       for (const elemento of observados) {
@@ -796,31 +947,45 @@
     }, RITMO.REEXAMEN_MS);
   }
 
-  // X redibuja sin parar: cada cambio dentro de un artículo lo marca para el próximo examen
-  // (también los nodos de texto: X reutiliza bloques cambiando solo su contenido), y cada caja
-  // nuestra que desaparece devuelve su original.
+  // X redibuja sin parar. Cada cambio dentro de un artículo lo marca para el próximo examen
+  // (también los nodos de texto: X reutiliza bloques cambiando solo su contenido); cada caja
+  // nuestra que desaparece devuelve su original; y lo que toca un artículo que lleva caja se
+  // examina en el acto, porque X puede haber reutilizado el bloque para otra publicación.
   const articuloDe = (nodo) => (nodo.nodeType === 1 ? nodo.closest('article') : nodo.parentElement?.closest('article'));
 
   new MutationObserver((mutaciones) => {
-    for (const mutacion of mutaciones) {
-      if (mutacion.type === 'characterData') {
-        const article = articuloDe(mutacion.target);
-        if (article) sucios.add(article);
-        continue;
+    try {
+      const tocados = cajasVivas.size ? new Set() : null;
+      for (const mutacion of mutaciones) {
+        if (mutacion.type === 'characterData') {
+          const article = articuloDe(mutacion.target);
+          if (article) {
+            sucios.add(article);
+            if (tocados) tocados.add(article);
+          }
+          continue;
+        }
+        for (const nodo of mutacion.addedNodes) {
+          const article = articuloDe(nodo);
+          if (article) {
+            sucios.add(article);
+            if (tocados) tocados.add(article);
+          } else if (nodo.nodeType === 1) {
+            for (const interior of nodo.querySelectorAll('article')) sucios.add(interior);
+          }
+        }
+        if (!cajasVivas.size) continue;
+        for (const nodo of mutacion.removedNodes) {
+          if (nodo.nodeType !== 1) continue;
+          if (nodo.classList.contains('xat-caja')) restaurarOriginalDe(nodo);
+          else for (const caja of nodo.querySelectorAll('.xat-caja')) restaurarOriginalDe(caja);
+        }
       }
-      for (const nodo of mutacion.addedNodes) {
-        const article = articuloDe(nodo);
-        if (article) sucios.add(article);
-        else if (nodo.nodeType === 1) for (const interior of nodo.querySelectorAll('article')) sucios.add(interior);
-      }
-      if (!cajasVivas.size) continue;
-      for (const nodo of mutacion.removedNodes) {
-        if (nodo.nodeType !== 1) continue;
-        if (nodo.classList.contains('xat-caja')) restaurarOriginalDe(nodo);
-        else for (const caja of nodo.querySelectorAll('.xat-caja')) restaurarOriginalDe(caja);
-      }
+      if (tocados) for (const article of tocados) if (article.querySelector('.xat-caja')) examinarSeguro(article);
+      if (sucios.size) reexaminar();
+    } catch (error) {
+      console.warn('[X AutoTranslate] No se pudo procesar un cambio de la página:', error?.message);
     }
-    if (sucios.size) reexaminar();
   }).observe(document.body, { childList: true, subtree: true, characterData: true });
 
   // Con la pestaña en segundo plano no se pide nada; al volver, sigue.
@@ -837,7 +1002,8 @@
     for (const nodo of document.querySelectorAll('article [data-testid="tweetText"]')) {
       bloques += 1;
       if (cajas.has(nodo)) {
-        cuenta.traducidas += 1;
+        if (cajas.get(nodo).getAttribute('data-xat-vista') === 'original') cuenta.devueltas += 1;
+        else cuenta.traducidas += 1;
       } else if (traducidoPorX(nodo)) cuenta.deX += 1;
       else if (baseDelIdioma(nodo.getAttribute('lang')) === idiomaDestino()) cuenta.destino += 1;
       else if (SIN_IDIOMA.has(baseDelIdioma(nodo.getAttribute('lang')))) cuenta.sinIdioma += 1;
@@ -867,14 +1033,14 @@
     }
   }
 
-  // Si el Socio vuelve al original con el «Mostrar original» de X, en ese artículo no se vuelve
-  // a pulsar nada y esa publicación no se vuelve a pedir.
+  // Si el Socio vuelve al original con el «Mostrar original» de X, en esa publicación no se
+  // vuelve a pulsar nada ni a pedir su traducción.
   document.addEventListener('click', (evento) => {
     const boton = evento.target instanceof Element ? evento.target.closest('button, [role="button"]') : null;
     if (!boton || esNuestro(boton)) return;
     const article = boton.closest('article');
     if (!article || !esBotonOriginal(boton)) return;
-    revertidos.add(article);
+    revertidos.set(article, idDelArticulo(article));
     const bloque = bloqueDespuesDe(boton, article);
     const id = bloque ? idDe(bloque) : '';
     if (id) devueltas.add(id);
@@ -964,5 +1130,5 @@
 
   if (MODO_SONDA) setTimeout(sondear, RITMO.DIAGNOSTICO_MS);
 
-  document.querySelectorAll('article').forEach(examinar);
+  document.querySelectorAll('article').forEach(examinarSeguro);
 })();
