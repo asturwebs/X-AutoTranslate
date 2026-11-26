@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "X AutoTranslate",
-  "version": "1.0.0",
-  "description": "Pulsa «Traducir publicación» en X por ti, en lo que entra en pantalla y X no ha traducido.",
+  "version": "2.0.0",
+  "description": "Traduce por ti en X lo que entra en pantalla y X no traduce sola: respuestas, hilos y publicaciones.",
   "content_scripts": [
     {
       "matches": ["https://x.com/*", "https://twitter.com/*"],

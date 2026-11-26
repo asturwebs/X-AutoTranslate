@@ -1,85 +1,89 @@
 # HANDOFF — X AutoTranslate
 
-Última actualización: 2026-11-26 17:2x (sesión BytIA)
+Última actualización: 2026-11-26 19:xx (sesión BytIA)
 
 ## Estado
 
-🟢 **v1.0.0 construida, probada en el simulador y revisada. En `main` y subida. Sin estrenar en la X real.**
+🟡 **v2.0.0 construida y probada en el simulador, en la rama `feature/v2`. Falta la prueba en la X real antes de fusionarla.**
 
-- `manifest.json` + `content.js`: la extensión. Sin permisos, sin red, sin almacenamiento y sin dependencias.
-- `test/`: bancada de pruebas, 16 escenarios. `node test/run.mjs`.
-- `docs/superpowers/specs/2026-11-26-x-autotranslate-design.md`: diseño.
-- `docs/superpowers/plans/2026-11-26-x-autotranslate-v1.md`: plan ejecutado, con sus enmiendas al final.
+- La **v1.0.0** está en `main` y subida: solo pulsa el botón «Traducir publicación» de X. En la X real no sirve para las respuestas de un hilo, porque **X no pone ese botón en ellas**.
+- La **v2.0.0** añade un segundo camino: pedir la traducción al servicio de X y ponerla en el sitio del original. Está entera en `feature/v2`, con 41 escenarios en verde. Su contrato con X es el de la documentación pública y del simulador: **ninguna ruta se ha probado con la sesión del Socio**.
+- **Pendiente y bloqueante:** el resultado de la **sonda** en la X real del Socio (Tarea 0).
 
-## Versiones y subida
+## Dónde está cada cosa (ojo: hay dos carpetas)
 
-- Extensión: `1.0.0` (en `manifest.json`).
-- Repositorio: `asturwebs/X-AutoTranslate`, público. Todo lo del proyecto está en `main`, sincronizado con `origin/main` en el commit que lleva este fichero.
-- Probado con Node 26.13.1 y Chromium 158.0.8127.88, los de esta máquina el 26-nov.
-- Sin licencia.
+| Carpeta | Qué es | Estado |
+|---|---|---|
+| `~/Projects/X-AutoTranslate` | La que carga Chrome como extensión desempaquetada | Desacoplada en `e090492` (v1 + sonda de diagnóstico). **No moverla** hasta fusionar la v2 |
+| `~/Projects/X-AutoTranslate-dev` | Worktree de desarrollo, rama `feature/v2` | Aquí se desarrolla la v2. Al fusionar: `git worktree remove` |
+
+Es un mismo repositorio con dos árboles de trabajo (`git worktree list`). El registro de ejecución del plan está en `.superpowers/sdd/2026-11-26-x-autotranslate-v2/progress.md` dentro de cada uno.
 
 ## Hecho
 
-- **2026-11-26 14:1x** — creados el workspace (`~/Projects/X-AutoTranslate`) y el repositorio público (`asturwebs/X-AutoTranslate`).
-- **2026-11-26 14:1x-14:4x** — investigación del botón de traducir de X, diseño y plan. Detalle en la entrada 10:1x-17:2x del `HANDOFF.md` del home.
-- **2026-11-26 15:2x-16:3x** — ejecución del plan (4 tareas) en la rama `feature/v1`: extensión completa y bancada de pruebas.
-- **2026-11-26 16:3x-17:2x** — revisión final de un revisor independiente (contexto limpio, modelo opus): sin críticos, tres importantes, once menores. Pasada única de arreglos: hueco entre clics sorteado de 600 a 1500 ms, temporizador propio para el plazo de fallo, regla de etiqueta cerrada y pruebas para las comprobaciones previas al clic. Barrido final de 14 roturas intencionadas: las de comportamiento, todas cazadas.
-- **Descartados** por el camino: `cpetschnig/translate-twitter`, `amahteru/x-auto-translate` y la extensión de la tienda `Automatic TWITTER Translator` (tope de 50/día).
-
-## Autonomía del Socio
-
-El 26-nov, sobre las 15:1x, el Socio escribió: «me voy a la siesta, regreso en un par de horas, tienes total autonomía para este proyecto». Con eso se ejecutó el plan, se fusionó la rama en `main` y se subió, sin pedir el OK de cada paso. No entra en esa autonomía: publicar fuera del repositorio (tienda de Chrome) y elegir la licencia. Se pidió al Socio que lo confirme en el resumen final.
+- **2026-11-26 14:1x–17:2x** — v1: diseño, plan, construcción, revisión independiente, fusión y subida. Detalle en la entrada 10:1x–16:5x del `HANDOFF.md` del home.
+- **2026-11-26 17:3x–17:5x** — el Socio prueba la v1 en su X: las respuestas del hilo siguen sin traducirse. Causa raíz: X no pone enlace de traducir en las respuestas (su captura de las 17:30). El Socio elige el enfoque de pedir la traducción a X.
+- **2026-11-26 17:5x–18:2x** — **revisión adversaria** del diseño y el plan de la v2 (MiMo v2.6-pro y DeepSeek flash, motores distintos del autor): «GO con arreglos». Catorce hallazgos, trece corregidos, uno contestado con evidencia, tres escalados y ratificados por el Socio (sonda antes de construir; cada pestaña por su cuenta; topes de 60 por página y 300 por hora). Registro: `~/Work/x-autotranslate-adversarial-v2/delta.md` e `informes/`.
+- **2026-11-26 18:2x–19:xx** — v2: Tarea 0 (sonda), Tareas 1 a 3 (camino de petición, caja, techo y paros). Dos defectos reales cazados por las pruebas: un 429 se tomaba por fallo definitivo y no se reintentaba; al reutilizar X un bloque mientras se pedía su traducción, la publicación nueva quedaba sin traducir. Barrido de 27 roturas intencionadas: 25 cazadas a la primera, 1 tapada por tres salvaguardas (la rotura triple sí la caza), 1 salvaguarda redundante.
 
 ## Cómo probar
 
 ```sh
-node test/run.mjs
+cd ~/Projects/X-AutoTranslate-dev
+node test/run.mjs            # 41 escenarios, unos 3 minutos
+node test/run.mjs hilo       # solo algunos
 ```
 
-Sin dependencias. Abre un Chromium sin cabeza con perfil temporal, por el canal de depuración (`--remote-debugging-pipe`, sin puertos), sobre `test/mock-x.html`. El binario se cambia con `XAT_CHROME`. Tarda un minuto y medio.
+Sin dependencias. Un Chromium sin cabeza con perfil temporal, por `--remote-debugging-pipe`, sobre `test/mock-x.html`, servida por HTTP en `127.0.0.1` (puerto aleatorio, solo durante las pruebas) porque las cookies no existen sobre `file://`. Para romper el código a propósito: `python3 -I .superpowers/sdd/2026-11-26-x-autotranslate-v2/mutar.py`.
+
+## La sonda (Tarea 0)
+
+La carpeta que carga Chrome lleva una versión de diagnóstico que **no cambia nada en la página**: a los 5 s escribe un mensaje `[X AutoTranslate SONDA]` en consola con lo que ve (idioma, sesión, bloques de texto, enlaces permanentes, estructura de los artículos) y hace **una petición por ruta** (Grok, Grok en `api.x.com`, clásica) para el primer candidato.
+
+Pasos que se le dieron al Socio: recargar la extensión en `chrome://extensions` → abrir un hilo → F12 → Console → recargar → copiar el mensaje y pegarlo.
+
+**Con lo que salga hay que fijar, antes de fusionar:**
+
+1. Qué ruta responde con su sesión y con qué cuerpo (trozos por línea en Grok; `translation` en la clásica). Si responde 404 o 403 en todas, ver si X exige `x-client-transaction-id`.
+2. Que cada bloque de texto lleva `lang` y dónde está su enlace permanente (una respuesta, y una cita dentro de un post).
+3. Dónde pone X la barra «Traducido de…»: el código la busca entre el bloque de texto anterior y el actual.
+
+Las funciones afectadas en `content.js`: `idDe`, `cajaDeCitaDe`, `traducidoPorX`, `pedirAX`, `textoGrok`, `textoClasico`, `cabecerasDeSesion`.
 
 ## Pendientes
 
-1. **Prueba en la X real del Socio.** Es lo único que falta para dar la v1 por buena. Pasos en «Si no traduce» del `README.md`. Hay que mirar:
-   - la etiqueta exacta del botón «Traducir publicación» en su interfaz (su `aria-label` y su texto);
-   - que el clic programático dispara la traducción en su cuenta;
-   - qué hace X con el control al recibir el clic y cuando falla (si también desaparece al fallar, no hay forma de detectar el fallo);
-   - si el control es un conmutador (pulsarlo otra vez devuelve el original): entonces un reintento desharía la traducción;
-   - qué ritmo tolera X antes de responder 429;
-   - que funciona en la ventana `--app` de la web app;
-   - que desactiva la extensión de la tienda, que al pasar de 50 pone su aviso de límite bajo cada respuesta.
-2. **Licencia del repositorio.** Sin decidir; es del Socio.
-3. **Publicar en la Chrome Web Store**, si se quiere. Hoy se carga desempaquetada.
-4. **Menores aplazados de la revisión**, por si salen en la X real:
-   - la vuelta atrás solo se detecta con `click`; con Enter o Espacio depende de que X emita `click`;
-   - «Mostrar original» se recuerda por artículo: revertir la cita suprime también el principal, y no se consulta en la cola ni en el reintento;
-   - un elemento reutilizado que pase a «Traducir publicación» cambiando solo su texto no se reexamina;
-   - una traducción que tarda más de 5 s cuenta como fallo;
-   - `enPantalla` no descuenta la cabecera fija;
-   - el manifiesto no lo ejercita ninguna prueba;
-   - el rendimiento no está medido.
-5. **Mejoras posibles:** un interruptor para pausar la extensión sin ir a `chrome://extensions`; acordarse por identificador de publicación de las que el Socio devolvió al original.
+1. **Recoger la sonda del Socio y ajustar** las funciones de arriba. Después quitar `sondear()` y `MODO_SONDA` de `content.js` (y el escenario `sonda` del simulador): es el último paso de la Tarea 4.
+2. Revisión final independiente del código con `delta.md` en la mano; pasada de arreglos; fusionar `feature/v2` en `main`; subir; quitar el worktree (`git worktree remove ~/Projects/X-AutoTranslate-dev`) y dejar `~/Projects/X-AutoTranslate` en `main`.
+3. **Prueba en la X real del Socio con la v2:** que las respuestas se traducen según baja; el aspecto de la barra propia junto a la de X (tema oscuro y claro); qué ritmo y volumen tolera X antes de un 429.
+4. **Licencia del repositorio.** Sin decidir; es del Socio.
+5. Publicar en la Chrome Web Store, si se quiere. Hoy se carga desempaquetada.
+6. Menores aplazados de la revisión de la v1 (la vuelta atrás con teclado, rendimiento sin medir, el manifiesto sin prueba automática) y de la adversaria de la v2 (coordinación entre pestañas, no hecha por decisión del Socio).
 
 ## Cómo continuar
 
-1. Leer este fichero y el diseño.
-2. Si el Socio ya probó la extensión en su X: partir de lo que vio (consola, texto del botón) y corregir.
-3. Si no: pedírselo con los pasos de «Si no traduce» del `README.md`.
-4. Al cerrar una sesión con trabajo de código, actualizar este fichero y el `HANDOFF.md` del home.
+1. Leer este fichero y el diseño v2 (`docs/superpowers/specs/2026-11-26-x-autotranslate-v2-design.md`).
+2. Si el Socio ya pegó la salida de la sonda: partir de ahí. Si no: pedírsela.
+3. Al cerrar una sesión con trabajo de código, actualizar este fichero y el `HANDOFF.md` del home.
 
 ## Lecciones que ya están pagadas
 
+- X **no pone enlace de traducir en las respuestas de un hilo**: solo traduce solo el post principal. Por eso hay que pedirle la traducción al servicio.
+- Ese servicio no tiene un `data-testid` ni nada parecido en el botón; y nadie ha probado sus rutas con esta cuenta todavía.
 - El botón de traducir de X no tiene un `data-testid` estable: se localiza por su nombre accesible. No se detecta por posición; un clic equivocado en X puede ser un «me gusta» o un repost.
-- `element.click()` funciona, pero X redibuja el artículo tras el clic: hay que volver a examinarlo o la cita se queda sin traducir.
-- X limita las peticiones a su traducción (429): de ahí la cola de uno en uno, la espera por respuesta y la pausa tras fallos seguidos. El hueco se sortea porque una cadencia fija delata un robot.
+- `element.click()` funciona, pero X redibuja el artículo tras el clic.
+- X limita las peticiones a su traducción: de ahí la cola, la espera por respuesta y la pausa tras fallos. El hueco se sortea porque una cadencia fija delata un robot.
 - Un plazo que solo se comprueba cuando otra cosa llama a la función no es un plazo: el fallo lleva su propio temporizador.
-- En las pruebas, `FALLO_MS` debe ser distinto de `ESPERA_MAX_MS`, o una espera tapa la otra.
-- Chromium sin cabeza deja la página como oculta unos 2,5 s después de arrancar (deja de dibujar y ralentiza los temporizadores encadenados). La bancada lo evita con `Emulation.setFocusEmulationEnabled`, `Page.bringToFront` y los flags `--disable-background-*`, y falla el escenario si la página no está visible.
+- En las pruebas, `FALLO_MS` debe ser distinto de `ESPERA_MAX_MS`, o una espera tapa la otra. Y un 429 no es «un 4xx más».
+- Cuando X reutiliza un bloque cambiando solo su texto, no hay nodos nuevos: el observador tiene que mirar también los nodos de texto.
+- Una prueba que pasa desde el principio puede ser hueca: se comprueba rompiendo el código a propósito.
+- Chromium sin cabeza deja la página como oculta unos 2,5 s después de arrancar. La bancada lo evita con `Emulation.setFocusEmulationEnabled` y los flags `--disable-background-*`, y falla el escenario si la página no está visible. Para ocultarla a propósito: otra pestaña con la emulación quitada.
 - `--dump-dom --virtual-time-budget` no vale para probar nada que dependa del scroll.
 - El nivel de `console.warn` en el protocolo de depuración es `warning`, no `warn`.
-- Una prueba que pasa desde el principio puede ser hueca: se comprueba rompiendo el código a propósito (mutación) y mirando si falla.
+- La revisión adversaria con dos motores distintos cazó en 15 minutos lo que el autor no vio en una hora de diseño: entre otros, que la extensión se pulsaría a sí misma y que no tenía techo de peticiones.
 
 ## Referencias
 
-- `llpgf/x-grok-visible-translate` (MIT): userscript de 339 líneas, solo lo visible y primero el botón nativo. Fuente de tres ideas, con crédito en el código y en el README.
-- `Noctyn/x-native-translator` (MIT): userscript con cola y pausas ante 429; localiza el botón por su texto, con «Traducir publicación» en la lista.
+- `llpgf/x-grok-visible-translate` (MIT): userscript de 339 líneas, solo lo visible y primero el botón nativo. Fuente de ideas, con crédito en el código y en el README.
+- `Noctyn/x-native-translator` (MIT): userscript con cola y pausas ante 429; llama a la API de traducción de X.
+- `dfrnoch/liquidX` y `rien7/twitter-extension-api`: documentación pública del contrato del servicio de traducción.
+- Revisión adversaria de la v2: `~/Work/x-autotranslate-adversarial-v2/` (congelado, huellas, briefs, informes, `delta.md`).

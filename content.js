@@ -85,7 +85,8 @@
   const duenoDe = new WeakMap();    // caja → bloque
   const memoria = new Map();        // identificador → traducción que X ya contestó
   const devueltas = new Set();      // identificadores que el Socio devolvió al original
-  const pedidas = new Set();        // identificificador ya pedidos (para no contar dos veces)
+  const pedidas = new Set();        // publicaciones ya pedidas (para no contar dos veces)
+  const fallidas = new Set();       // publicaciones que X no pudo traducir y se dejaron en paz
   const pedidasPorHora = [];        // momentos de la primera petición de cada publicación
   let pedidasEnPagina = 0;
   let peticionEnVuelo = false;
@@ -127,12 +128,12 @@
   // Idioma base de la interfaz de X: la cookie `lang`, si es un código válido; si no, el de
   // <html lang>; y si no, español. (X usa `xx` para «inglés por defecto».)
   function idiomaDestino() {
-    const base = (texto) => texto.trim().toLowerCase().split('-')[0];
-    const valido = (idioma) => /^[a-z]{2,3}$/.test(idioma);
-    const deLaCookie = base(cookie('lang'));
-    const delHtml = base(document.documentElement.lang);
-    return (valido(deLaCookie) && deLaCookie) || (valido(delHtml) && delHtml) || 'es';
+    const deLaCookie = baseDelIdioma(cookie('lang'));
+    const delHtml = baseDelIdioma(document.documentElement.lang);
+    return (VALIDO_IDIOMA.test(deLaCookie) && deLaCookie) || (VALIDO_IDIOMA.test(delHtml) && delHtml) || 'es';
   }
+  const VALIDO_IDIOMA = /^[a-z]{2,3}$/;
+  const baseDelIdioma = (texto) => (texto ?? '').trim().toLowerCase().split('-')[0];
 
   // La caja de cita de un bloque: el ancestro role="link" más cercano dentro del artículo.
   function cajaDeCitaDe(nodo) {
@@ -195,8 +196,8 @@
   // ¿Se le puede pedir a X la traducción de este bloque?
   function esCandidato(nodo, id) {
     if (!id || !haySesion() || devueltas.has(id)) return false;
-    const idioma = (nodo.getAttribute('lang') ?? '').trim().toLowerCase();
-    if (SIN_IDIOMA.has(idioma) || idioma.split('-')[0] === idiomaDestino()) return false;
+    const idioma = baseDelIdioma(nodo.getAttribute('lang'));
+    if (idioma === idiomaDestino() || SIN_IDIOMA.has(idioma)) return false;
     if (traducidoPorX(nodo)) return false;
     return TIENE_LETRAS.test((nodo.textContent ?? '').replace(/https?:\/\/\S+/g, ''));
   }
@@ -430,6 +431,7 @@
     console.warn(`[X AutoTranslate] X no tradujo la publicación ${id}: ${error.message} (${Math.round(ms)} ms). `
       + (definitivo ? 'Se deja en paz.' : 'Se reintenta una vez.'));
     if (definitivo) {
+      fallidas.add(id);
       const info = textos.get(nodo);
       if (info) info.estado = 'descartado';
     } else {
@@ -826,9 +828,30 @@
     if (!document.hidden) bombeo();
   });
 
-  // Una sola vez: si hay botones que parecen de traducir y no están en la lista, se avisa en
-  // consola con lo que se ha visto, para añadirlo. No se pulsa nada que no esté en la lista.
+  // Una sola vez, a los 5 s: el estado de la página en consola, contando todos los casos (también
+  // los que no se pueden pedir), para que nada falle en silencio. Y, si hay botones que parecen
+  // de traducir y no están en la lista, cuáles son, para añadirlos.
   function diagnosticar() {
+    const cuenta = { deX: 0, destino: 0, sinIdioma: 0, sinEnlace: 0, devueltas: 0, traducidas: 0 };
+    let bloques = 0;
+    for (const nodo of document.querySelectorAll('article [data-testid="tweetText"]')) {
+      bloques += 1;
+      if (cajas.has(nodo)) {
+        cuenta.traducidas += 1;
+      } else if (traducidoPorX(nodo)) cuenta.deX += 1;
+      else if (baseDelIdioma(nodo.getAttribute('lang')) === idiomaDestino()) cuenta.destino += 1;
+      else if (SIN_IDIOMA.has(baseDelIdioma(nodo.getAttribute('lang')))) cuenta.sinIdioma += 1;
+      else if (!idDe(nodo)) cuenta.sinEnlace += 1;
+      else if (devueltas.has(idDe(nodo))) cuenta.devueltas += 1;
+    }
+    console.info(`[X AutoTranslate] Página: bloques de texto ${bloques} · ya traducidas por X: ${cuenta.deX} · `
+      + `en el idioma de la interfaz: ${cuenta.destino} · sin idioma: ${cuenta.sinIdioma} · `
+      + `sin enlace permanente: ${cuenta.sinEnlace} · devueltas al original: ${cuenta.devueltas} · `
+      + `traducidas: ${cuenta.traducidas} · pedidas: ${pedidas.size} · fallidas: ${fallidas.size} · `
+      + `en espera: ${cola.filter((trabajo) => trabajo.tipo === 'texto').length}`);
+    if (!haySesion()) {
+      console.warn('[X AutoTranslate] No hay sesión de X (falta la cookie ct0): no se pueden pedir traducciones.');
+    }
     const vistas = new Set();
     for (const el of document.querySelectorAll('article button, article [role="button"]')) {
       if (esNuestro(el)) continue;

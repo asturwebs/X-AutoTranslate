@@ -146,3 +146,17 @@ ctx.ocultarPestania(bool)  // manda la pestaña a segundo plano o la trae de vue
 - [ ] **Step 5: `node test/run.mjs`** → 44 PASS (el `sonda` desaparece con la sonda).
 - [ ] **Step 6: Commit** `docs: v2, seguridad, techo y diagnóstico`.
 - [ ] **Step 7:** revisión final independiente con el `delta.md` de la adversarial en la mano, pasada de arreglos, fusión en `main`, subida y aviso al Socio.
+
+---
+
+## Enmiendas durante la ejecución (2026-11-26)
+
+Estas son las decisiones de ejecución que cambian lo que dice el plan. El registro completo está en `.superpowers/sdd/2026-11-26-x-autotranslate-v2/progress.md`.
+
+- **Tarea 0, paso 4:** «sonda PASS y las 16 de la v1 en verde», no «30 PASS»: los escenarios de las tareas 1 a 3 ya estaban escritos y en rojo.
+- **Tarea 1:** el escenario `hilo` espera **5** peticiones (hay cinco respuestas en inglés, no seis) y se rehace: el tuit en español está en pantalla desde el principio, el recorrido va en dos pasos y se comprueba que **todas** las peticiones van de una en una. El escenario `citaSinEnlace` exige exactamente una petición. El escenario `sinPermiso` se reescribe según el diseño corregido: dos peticiones (Grok y clásica) de la primera publicación y paro. La sonda se enciende solo en su escenario (`sonda: true`).
+- **Tarea 2:** escenario nuevo `reutilizarEnVuelo` (X reutiliza un bloque mientras se pide su traducción). Cazó un defecto real.
+- **Tarea 3:** `pestaniaOculta` necesita un mando nuevo en la bancada (`ctx.ocultarPestania`), que manda la pestaña a segundo plano de verdad.
+- **Recuentos reales**, no los 44 del plan: 31 al cerrar la Tarea 1, 40 al cerrar la Tarea 3, 41 con el resumen de la Tarea 4, y 40 cuando se vaya la sonda.
+- **Commits:** las Tareas 1, 2 y 3 van juntas en un solo commit porque el código se escribió de una vez.
+- **Tarea 4:** la sonda no se quita hasta que llegue el resultado de la X real, porque puede hacer falta corregirla.

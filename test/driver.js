@@ -918,6 +918,8 @@
 
     // Sin sesión no hay nada que pedir: no se hace ninguna petición y no se toca nada.
     sinSesion: {
+      ajustes: { DIAGNOSTICO_MS: 500 },
+      avisosEsperados: ['No hay sesión de X'],
       async ejecutar(c) {
         c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'Not logged in here.' });
         c.crearPublicacion({ id: 'r2', boton: 'ninguno', texto: 'Nothing to do.' });
@@ -1219,6 +1221,27 @@
         for (const [id, texto] of [['r1', 'Hidden tab, no requests.'], ['r2', 'Back to the tab.']]) {
           if (c.traduccionDe(id) !== `ES: ${texto}`) fallos.push(`al volver a la pestaña, ${id} no está traducida («${c.traduccionDe(id)}”)`);
         }
+        return fallos;
+      },
+    },
+
+    // A los 5 s, un resumen de la página en consola: cuenta todos los casos, también los que no se
+    // pueden pedir, para que nada falle en silencio.
+    diagnostico: {
+      sesion: true,
+      ajustes: { DIAGNOSTICO_MS: 1500 },
+      avisosEsperados: ['[X AutoTranslate] Página:', 'ya traducidas por X: 1', 'en el idioma de la interfaz: 1', 'sin enlace permanente: 1', 'traducidas: 1', 'pedidas: 1'],
+      async ejecutar(c) {
+        c.crearTraducidaPorX({ id: 'principal', texto: 'The main post, already translated by X.' });
+        c.crearPublicacion({ id: 'r1', boton: 'ninguno', texto: 'A reply in English.' });
+        c.crearPublicacion({ id: 'es', lang: 'es', boton: 'ninguno', texto: 'Una respuesta en español.' });
+        c.crearPublicacion({ id: 'sinenlace', boton: 'ninguno', texto: 'A reply without a permalink.', enlace: false });
+        await c.avanzar(2000);
+      },
+      comprobar(c) {
+        const fallos = [];
+        if (c.traduccionDe('r1') !== 'ES: A reply in English.') fallos.push(`r1 no está traducida («${c.traduccionDe('r1')}”)`);
+        if (c.peticiones.length !== 1) fallos.push(`se hicieron ${c.peticiones.length} peticiones y debería ser 1`);
         return fallos;
       },
     },
