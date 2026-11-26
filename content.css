@@ -1,0 +1,52 @@
+/* X AutoTranslate: caja de traducción propia. Lo inyecta el manifiesto junto con content.js. */
+
+/* El original solo se esconde mientras nuestra caja está delante. */
+div[data-testid="tweetText"][data-xat="traducido"] {
+  display: none;
+}
+
+.xat-caja {
+  --xat-enlace: #1d9bf0;
+  color: inherit;
+  font: inherit;
+}
+
+.xat-barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: inherit;
+  font-size: 13px;
+  line-height: 16px;
+  opacity: 0.65;
+}
+
+.xat-enlace {
+  all: unset;
+  color: var(--xat-enlace);
+  cursor: pointer;
+  font: inherit;
+}
+
+.xat-enlace:hover {
+  text-decoration: underline;
+}
+
+.xat-enlace:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--xat-enlace);
+  outline-offset: 2px;
+}
+
+.xat-texto {
+  unicode-bidi: plaintext;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* Vista «original»: el texto de X vuelve a verse y nuestra caja se queda solo con el enlace. */
+.xat-caja[data-xat-vista="original"] .xat-rotulo,
+.xat-caja[data-xat-vista="original"] .xat-texto {
+  display: none;
+}

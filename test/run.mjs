@@ -117,6 +117,23 @@ const conPlazo = (promesa, ms, texto) => Promise.race([
 
 // ---- Ejecución -----------------------------------------------------------------------
 
+// Manda la pestaña de pruebas a segundo plano (oculta = true) o la trae de vuelta. Un escenario
+// lo pide con ctx.ocultarPestania(). Para ocultarla hace falta otra pestaña delante y quitar la
+// emulación de foco; para traerla de vuelta, con restaurar la emulación basta.
+let pestañaDeCortina = null;
+async function fijarOculta(oculta, sesion) {
+  await enviar('Emulation.setFocusEmulationEnabled', { enabled: !oculta }, sesion);
+  if (oculta) {
+    if (!pestañaDeCortina) pestañaDeCortina = (await enviar('Target.createTarget', { url: 'about:blank' })).targetId;
+  } else {
+    if (pestañaDeCortina) {
+      await enviar('Target.closeTarget', { targetId: pestañaDeCortina });
+      pestañaDeCortina = null;
+    }
+    await enviar('Page.bringToFront', {}, sesion);
+  }
+}
+
 async function ejecutarEscenario(nombre, sesion) {
   avisos.length = 0;
   excepciones.length = 0;
@@ -127,18 +144,26 @@ async function ejecutarEscenario(nombre, sesion) {
   await enviar('Page.bringToFront', {}, sesion);
   let resultado;
   let visibilidad;
+  let oculta = false;
+  let ocultaActual = false;
   while (!resultado && Date.now() - inicio < LIMITE_MS) {
     await new Promise((resolver) => setTimeout(resolver, 100));
-    ({ json: resultado, visibilidad } = (await enviar('Runtime.evaluate', {
-      expression: '({ json: JSON.stringify(window.__result), visibilidad: document.visibilityState })',
+    ({ json: resultado, visibilidad, oculta } = (await enviar('Runtime.evaluate', {
+      expression: '({ json: JSON.stringify(window.__result), visibilidad: document.visibilityState, oculta: window.__xatOculta === true })',
       returnByValue: true,
     }, sesion)).result?.value ?? {});
+    if (oculta !== ocultaActual) {
+      await fijarOculta(oculta, sesion);
+      ocultaActual = oculta;
+      await new Promise((resolver) => setTimeout(resolver, 300));
+    }
     if (resultado) {
       const candidato = JSON.parse(resultado);
       if (candidato.escenario === nombre) resultado = candidato;
       else resultado = undefined;
     }
   }
+  if (ocultaActual) await fijarOculta(false, sesion);
   // Una página que no está en primer plano tiene los tiempos ralentizados: su veredicto no vale.
   const fallos = [...(resultado?.fallos ?? [`sin veredicto tras ${LIMITE_MS} ms`]), ...excepciones.map((e) => `excepción: ${e}`)];
   if (visibilidad !== 'visible') fallos.push(`la página de pruebas no está en primer plano («${visibilidad}»): los tiempos no son fiables`);
