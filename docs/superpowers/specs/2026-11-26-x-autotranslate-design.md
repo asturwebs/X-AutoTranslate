@@ -36,6 +36,15 @@ Pulsar el botón de X reutiliza su propia traducción: no hay claves, ni servici
 - El botón de X no tiene un identificador estable conocido. Se localiza por su texto exacto en el idioma de la interfaz («Traducir publicación»). Si X cambia el texto o se usa la interfaz en otro idioma, se añade a la lista.
 - No se puede medir desde fuera. El texto exacto, la tolerancia de X y el comportamiento en la ventana de la web app se comprueban en la página real.
 
+## Lo que se toma de la extensión de la tienda
+
+`Automatic TWITTER Translator` (v1.2.20) hace el mismo trabajo traduciendo por su cuenta. De ella se toman ideas, no código: es software propietario, distribuido minificado y sin licencia de reutilización en el paquete.
+
+- **Selectores, ya en uso en una extensión que se mantiene:** `article` como unidad de publicación, `div[data-testid='tweetText']` para el texto y `div[data-testid='User-Name'] a[dir]` para el enlace a la publicación.
+- **La traducción vive dentro del bloque del post**, no en un panel aparte. Aquí lo hace X al responder al clic.
+- **Qué no copiar:** sondea la página con `setInterval` y envía a traducir todo lo que hay en el DOM, esté o no en pantalla. Cuando X redibuja, el nodo es nuevo y lo vuelve a pedir, y su contador diario también suma esas repeticiones. Así se agota una cuota de 50. Por eso aquí solo se traduce lo que entra en pantalla y nada se pide dos veces.
+- No usa el botón nativo de X. Aquí ese botón es toda la mecánica.
+
 ## Enfoques considerados
 
 | | Qué es | A cambio |
