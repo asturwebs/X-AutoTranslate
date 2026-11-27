@@ -47,7 +47,7 @@ Si crees que has encontrado un agujero, dínoslo en privado en vez de en un issu
 
 ## Estado
 
-**v2.0.2.** Probada contra una página que simula a X, con un servicio de traducción falso. Su forma de pedir la traducción se comprobó con una sesión real de X el 26-nov-2026, y la 2.0.0 y la 2.0.1 se usaron en la X real: las respuestas de un hilo se traducen al bajar. La 2.0.2 no cambia cómo traduce. Si no traduce, mira [Si no traduce](#si-no-traduce).
+**v2.0.2.** Probada contra una página que simula a X, con un servicio de traducción falso. Su forma de pedir la traducción se comprobó con una sesión real de X el 26-nov-2026, y la 2.0.0, la 2.0.1 y la 2.0.2 se usan en la X real: las respuestas de un hilo se traducen al bajar. La 2.0.2 no cambia cómo traduce. Si no traduce, mira [Si no traduce](#si-no-traduce).
 
 ## Instalación
 
